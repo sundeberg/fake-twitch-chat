@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Fake Twitch Chat — Settings</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      max-width: 500px;
+      margin: 48px auto;
+      padding: 0 24px;
+      font-family: Inter, -apple-system, sans-serif;
+      background: #0e0e10;
+      color: #efeff1;
+    }
+
+    h2 {
+      font-size: 20px;
+      font-weight: 700;
+      color: #9147ff;
+      margin-bottom: 24px;
+    }
+
+    .field {
+      margin-bottom: 20px;
+    }
+
+    label {
+      display: block;
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: #adadb8;
+      margin-bottom: 8px;
+    }
+
+    .field-hint {
+      margin-top: 5px;
+      font-size: 11px;
+      color: #6a6a6e;
+    }
+
+    input[type="password"],
+    input[type="text"] {
+      width: 100%;
+      padding: 10px 12px;
+      background: #18181b;
+      border: 1px solid #3a3a3e;
+      border-radius: 6px;
+      color: #efeff1;
+      font-size: 13px;
+      font-family: monospace;
+      transition: border-color 0.15s;
+    }
+
+    input:focus {
+      outline: none;
+      border-color: #9147ff;
+    }
+
+    .show-key {
+      font-size: 12px;
+      color: #adadb8;
+      background: none;
+      border: none;
+      cursor: pointer;
+      margin-top: 6px;
+      padding: 0;
+      font-family: inherit;
+    }
+
+    .show-key:hover { color: #efeff1; }
+
+    button[type="submit"] {
+      padding: 10px 24px;
+      background: #9147ff;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 600;
+      transition: background 0.15s;
+    }
+
+    button[type="submit"]:hover {
+      background: #7c3aed;
+    }
+
+    .saved {
+      display: none;
+      color: #00ff7f;
+      font-size: 13px;
+      margin-top: 10px;
+      font-weight: 600;
+    }
+
+    .note {
+      margin-top: 32px;
+      font-size: 12px;
+      color: #adadb8;
+      line-height: 1.7;
+      border-top: 1px solid #2a2a2e;
+      padding-top: 20px;
+    }
+
+    .note strong {
+      color: #efeff1;
+    }
+  </style>
+</head>
+<body>
+  <h2>&#128172; Fake Twitch Chat — Settings</h2>
+
+  <div class="field">
+    <label for="api-key">Claude API Key</label>
+    <input type="password" id="api-key" placeholder="sk-ant-api03-...">
+    <button class="show-key" id="toggle-visibility">Show key</button>
+  </div>
+
+  <div class="field">
+    <label for="streamer-name">Your streamer name</label>
+    <input type="text" id="streamer-name" placeholder="e.g. xMathias" maxlength="32" style="font-family: inherit;">
+    <div class="field-hint">Chat will occasionally address you by this name.</div>
+  </div>
+
+  <button type="submit" id="save">Save</button>
+  <div class="saved" id="saved-msg">&#10003; Saved!</div>
+
+  <div class="note">
+    <strong>Your key stays on your device.</strong> It is stored in Chrome's local extension storage
+    and only ever sent directly to <strong>api.anthropic.com</strong> — never to any other server.<br><br>
+    Get your key at <strong>console.anthropic.com</strong> → API Keys.
+    The extension uses <strong>claude-haiku</strong> to keep costs very low.
+  </div>
+
+  <script src="options.js"></script>
+</body>
+</html>

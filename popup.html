@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    /* ── Theme tokens ── */
+    :root {
+      --bg:       #0e0e10;
+      --bg2:      #18181b;
+      --bg3:      #1f1f23;
+      --border:   #2a2a2e;
+      --border2:  #3a3a3e;
+      --text:     #efeff1;
+      --sub:      #adadb8;
+      --muted:    #6a6a6e;
+      --accent:   #9147ff;
+      --accent-bg:#1a0a2e;
+      --danger:   #f8312f;
+    }
+
+    @media (prefers-color-scheme: light) {
+      :root {
+        --bg:       #f7f7f8;
+        --bg2:      #efeff1;
+        --bg3:      #e8e8eb;
+        --border:   #d4d4d8;
+        --border2:  #adadb8;
+        --text:     #0e0e10;
+        --sub:      #53535f;
+        --muted:    #8a8a90;
+        --accent:   #9147ff;
+        --accent-bg:#f0eaff;
+        --danger:   #d9342f;
+      }
+    }
+
+    body {
+      width: 260px;
+      font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      font-size: 13px;
+    }
+
+    /* ── Header ── */
+    .header {
+      padding: 13px 16px;
+      background: var(--bg2);
+      border-bottom: 1px solid var(--border);
+      border-top: 2px solid var(--accent);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .header-title {
+      font-size: 13px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      color: var(--text);
+    }
+
+    .live-badge {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      padding: 3px 8px;
+      border-radius: 4px;
+      background: var(--bg3);
+      transition: background 0.2s;
+    }
+
+    .live-badge.active { background: var(--accent-bg); }
+
+    .live-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--border2);
+      transition: background 0.3s, box-shadow 0.3s;
+    }
+
+    .live-badge.active .live-dot {
+      background: var(--accent);
+      box-shadow: 0 0 6px color-mix(in srgb, var(--accent) 60%, transparent);
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+
+    .live-text {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.8px;
+      text-transform: uppercase;
+      color: var(--sub);
+      transition: color 0.2s;
+    }
+
+    .live-badge.active .live-text { color: var(--accent); }
+
+    /* ── Sections ── */
+    .section { padding: 14px 16px; }
+
+    .section-label {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.7px;
+      color: var(--sub);
+      display: block;
+    }
+
+    .divider {
+      height: 1px;
+      background: var(--border);
+    }
+
+    /* ── Toggle ── */
+    .toggle-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+    }
+
+    .toggle-info { display: flex; flex-direction: column; gap: 3px; }
+
+    .toggle-label { font-size: 13px; font-weight: 600; color: var(--text); }
+    .toggle-sub   { font-size: 11px; color: var(--sub); }
+
+    .switch { position: relative; width: 46px; height: 26px; flex-shrink: 0; }
+    .switch input { opacity: 0; width: 0; height: 0; position: absolute; }
+
+    .track {
+      position: absolute;
+      inset: 0;
+      background: var(--bg3);
+      border-radius: 26px;
+      cursor: pointer;
+      border: 1px solid var(--border2);
+      transition: background 0.2s, border-color 0.2s;
+    }
+
+    .thumb {
+      position: absolute;
+      width: 20px; height: 20px;
+      top: 3px; left: 3px;
+      background: var(--sub);
+      border-radius: 50%;
+      pointer-events: none;
+      transition: transform 0.2s, background 0.2s;
+    }
+
+    .switch input:checked ~ .track { background: var(--accent); border-color: var(--accent); }
+    .switch input:checked ~ .thumb { transform: translateX(20px); background: #fff; }
+
+    /* ── Reload hint ── */
+    @keyframes shake {
+      0%, 100% { transform: translateX(0); }
+      20%       { transform: translateX(-5px); }
+      40%       { transform: translateX(5px); }
+      60%       { transform: translateX(-3px); }
+      80%       { transform: translateX(3px); }
+    }
+
+    .reload-hint {
+      display: none;
+      margin: 0 16px;
+      padding: 9px 11px;
+      background: color-mix(in srgb, var(--danger) 10%, var(--bg2));
+      border: 1px solid color-mix(in srgb, var(--danger) 35%, transparent);
+      border-radius: 6px;
+      font-size: 11px;
+      color: var(--sub);
+      line-height: 1.5;
+    }
+
+    .reload-hint.shake { animation: shake 0.4s ease; }
+
+    .reload-hint-row {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .reload-hint-text {
+      flex: 1;
+      display: flex;
+      gap: 5px;
+      align-items: flex-start;
+    }
+
+    .reload-hint-icon { flex-shrink: 0; }
+
+    .reload-btn {
+      flex-shrink: 0;
+      padding: 4px 9px;
+      background: var(--danger);
+      color: #fff;
+      border: none;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 600;
+      font-family: inherit;
+      cursor: pointer;
+      transition: opacity 0.15s;
+    }
+
+    .reload-btn:hover { opacity: 0.85; }
+
+    /* ── Tier buttons ── */
+    .tier-btns { display: flex; gap: 6px; margin-top: 7px; }
+
+    .tier-btn {
+      flex: 1;
+      padding: 6px 4px;
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--sub);
+      font-size: 11px;
+      font-family: inherit;
+      font-weight: 600;
+      cursor: pointer;
+      text-align: center;
+      transition: border-color 0.15s, color 0.15s, background 0.15s;
+    }
+
+    .tier-btn:hover { border-color: var(--border2); color: var(--text); }
+
+    .tier-btn.active {
+      border-color: var(--accent);
+      color: var(--accent);
+      background: var(--accent-bg);
+    }
+
+    .tier-desc { font-size: 10px; color: var(--muted); margin-top: 5px; min-height: 14px; }
+
+    /* ── Mode select ── */
+    .mode-section { padding: 0 16px 14px; }
+
+    .mode-select-wrap { position: relative; }
+
+    .mode-select-wrap::after {
+      content: '▾';
+      position: absolute;
+      right: 10px; top: 50%;
+      transform: translateY(-50%);
+      color: var(--sub);
+      pointer-events: none;
+      font-size: 11px;
+    }
+
+    select {
+      width: 100%;
+      padding: 8px 28px 8px 10px;
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      font-size: 12px;
+      font-family: inherit;
+      cursor: pointer;
+      appearance: none;
+      -webkit-appearance: none;
+      transition: border-color 0.15s;
+    }
+
+    select:focus  { outline: none; border-color: var(--accent); }
+    select:hover  { border-color: var(--border2); }
+
+    /* ── Font size ── */
+    /* ── Username ── */
+    .username-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .username-label {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.7px;
+      color: var(--sub);
+      flex-shrink: 0;
+    }
+
+    .username-input {
+      flex: 1;
+      padding: 5px 8px;
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 5px;
+      color: var(--text);
+      font-size: 12px;
+      font-family: inherit;
+      outline: none;
+      transition: border-color 0.15s;
+      min-width: 0;
+    }
+
+    .username-input:focus { border-color: var(--accent); }
+    .username-input:hover { border-color: var(--border2); }
+
+    /* ── Font size ── */
+    .font-size-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-top: 10px;
+    }
+
+    .font-size-label {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.7px;
+      color: var(--sub);
+    }
+
+    .font-size-btns { display: flex; gap: 4px; }
+
+    .font-size-btn {
+      padding: 4px 10px;
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 5px;
+      color: var(--sub);
+      font-size: 11px;
+      font-family: inherit;
+      font-weight: 600;
+      cursor: pointer;
+      transition: border-color 0.15s, color 0.15s, background 0.15s;
+    }
+
+    .font-size-btn:hover { border-color: var(--border2); color: var(--text); }
+
+    .font-size-btn.active {
+      border-color: var(--accent);
+      color: var(--accent);
+      background: var(--accent-bg);
+    }
+
+    /* ── Intensity ── */
+    .intensity-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-top: 12px;
+    }
+
+    .intensity-labels {
+      display: flex;
+      justify-content: space-between;
+      font-size: 10px;
+      color: var(--sub);
+      margin-top: 5px;
+    }
+
+    input[type="range"] {
+      flex: 1;
+      -webkit-appearance: none;
+      height: 4px;
+      border-radius: 4px;
+      background: var(--border);
+      outline: none;
+      cursor: pointer;
+    }
+
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 14px; height: 14px;
+      border-radius: 50%;
+      background: var(--accent);
+      cursor: pointer;
+      transition: background 0.15s, transform 0.15s;
+    }
+
+    input[type="range"]::-webkit-slider-thumb:hover {
+      background: #a970ff;
+      transform: scale(1.2);
+    }
+
+    .intensity-value {
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--accent);
+      width: 16px;
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* ── Stats ── */
+    .stats { padding: 12px 16px; }
+
+    .stats-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 9px;
+    }
+
+    .reset-btn {
+      font-size: 11px;
+      color: var(--sub);
+      background: none;
+      border: none;
+      cursor: pointer;
+      padding: 0;
+      font-family: inherit;
+      transition: color 0.15s;
+    }
+
+    .reset-btn:hover { color: var(--text); }
+
+    .stat-grid  { display: flex; flex-direction: column; gap: 5px; }
+
+    .stat-row   { display: flex; justify-content: space-between; align-items: center; }
+
+    .stat-key   { color: var(--sub); font-size: 12px; }
+
+    .stat-val {
+      font-size: 12px;
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+      color: var(--text);
+    }
+
+    .stat-val.cost { color: var(--accent); }
+
+    .stat-note {
+      margin-top: 7px;
+      font-size: 10px;
+      color: var(--muted);
+      text-align: right;
+    }
+
+    /* ── Footer ── */
+    .footer { padding: 10px 16px 13px; border-top: 1px solid var(--border); }
+
+    .settings-btn {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      width: 100%;
+      padding: 7px 10px;
+      background: none;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--sub);
+      font-size: 12px;
+      font-family: inherit;
+      cursor: pointer;
+      justify-content: center;
+      transition: border-color 0.15s, color 0.15s, background 0.15s;
+    }
+
+    .settings-btn:hover {
+      border-color: var(--border2);
+      background: var(--bg2);
+      color: var(--text);
+    }
+  </style>
+</head>
+<body>
+
+  <div class="header">
+    <div class="header-title">&#128172; Fake Twitch Chat</div>
+    <div class="live-badge" id="live-badge">
+      <div class="live-dot"></div>
+      <span class="live-text" id="live-text">Off</span>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="toggle-row">
+      <div class="toggle-info">
+        <span class="toggle-label">Enable on this page</span>
+        <span class="toggle-sub" id="toggle-sub">Chat is inactive</span>
+      </div>
+      <label class="switch">
+        <input type="checkbox" id="toggle">
+        <div class="track"></div>
+        <div class="thumb"></div>
+      </label>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  <div class="section" style="padding-bottom:0;">
+    <span class="section-label">Tier</span>
+    <div class="tier-btns">
+      <button class="tier-btn active" data-tier="free">Free</button>
+      <button class="tier-btn" data-tier="standard">Standard</button>
+      <button class="tier-btn" data-tier="constant">Constant</button>
+    </div>
+    <div class="tier-desc" id="tier-desc">No API key needed. Hardcoded messages.</div>
+  </div>
+
+  <div class="divider" style="margin-top:14px;"></div>
+
+  <div class="reload-hint" id="reload-hint">
+    <div class="reload-hint-row">
+      <div class="reload-hint-text">
+        <span class="reload-hint-icon">&#9888;&#65039;</span>
+        <span id="reload-msg">Reload this tab to activate.</span>
+      </div>
+      <button class="reload-btn" id="reload-tab-btn">Reload</button>
+    </div>
+  </div>
+
+  <div class="mode-section">
+    <span class="mode-label" style="padding-top:13px; display:block; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.7px; color:var(--sub); margin-bottom:7px;">Chat Mode</span>
+    <div class="mode-select-wrap">
+      <select id="mode-select">
+        <option value="default">Default: Mixed crowd</option>
+        <option value="hype">Hype Train</option>
+        <option value="toxic">Toxic</option>
+        <option value="wholesome">Wholesome</option>
+        <option value="backseaters">Backseaters</option>
+        <option value="clueless">Clueless</option>
+      </select>
+    </div>
+    <div class="username-row">
+      <span class="username-label">Your name</span>
+      <input type="text" class="username-input" id="streamer-name-input" placeholder="e.g. xMathias" maxlength="32" autocomplete="off">
+    </div>
+
+    <div class="font-size-row">
+      <span class="font-size-label">Font size</span>
+      <div class="font-size-btns">
+        <button class="font-size-btn" data-size="11">S</button>
+        <button class="font-size-btn active" data-size="13">M</button>
+        <button class="font-size-btn" data-size="15">L</button>
+      </div>
+    </div>
+    <div class="intensity-row">
+      <input type="range" id="intensity-slider" min="0" max="10" value="5">
+      <span class="intensity-value" id="intensity-value">5</span>
+    </div>
+    <div class="intensity-labels">
+      <span>Mild</span>
+      <span>Intensity</span>
+      <span>Unhinged</span>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  <div class="stats">
+    <div class="stats-header">
+      <span class="section-label">Usage</span>
+      <button class="reset-btn" id="reset-usage">&#8630; Reset</button>
+    </div>
+    <div class="stat-grid">
+      <div class="stat-row">
+        <span class="stat-key">Est. cost</span>
+        <span class="stat-val cost" id="stat-cost">$0.0000</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-key">API calls</span>
+        <span class="stat-val" id="stat-fetches">0</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-key">Tokens used</span>
+        <span class="stat-val" id="stat-tokens">0</span>
+      </div>
+    </div>
+    <div class="stat-note">Tracked since last reset. Console may show more.</div>
+  </div>
+
+  <div class="footer">
+    <button class="settings-btn" id="options-link">
+      &#9881;&#65039; API Key Settings
+    </button>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
