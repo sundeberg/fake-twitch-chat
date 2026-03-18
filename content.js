@@ -13,10 +13,33 @@ let fetchGeneration = 0;
 let chatHistory = [];
 let pendingUserMessage = '';
 let streamerName = '';
+let currentTheme = 'auto';
 
 // Load streamer name from storage
 chrome.storage.local.get('streamerName', ({ streamerName: name }) => {
   if (name) streamerName = name;
+});
+
+// Confirmed BTTV shared emote IDs. Hardcoded here so updates take effect on
+// extension reload without waiting for the 24h API cache to expire.
+const BTTV_SHARED_EMOTES = {
+  'KEKW':      '5e9c6c187e090362f8b0b9e8',
+  'OMEGALUL':  '583089f4737a8e61abb0186b',
+  'Pog':       '5ff827395ef7d10c7912c106',
+  'PogChamp':  '61d538fd06fd6a9f5bdf6b44',
+  'LULW':      '5dc79d1b27360247dd6516ec',
+  'catJAM':    '5f1b0186cf6d2144653d2970',
+  'CATJAM':    '5f1b0186cf6d2144653d2970',
+  'PauseChamp':'5cd6b08cf1dac14a18c4b61f',
+  'GIGACHAD':  '609431bc39b5010444d0cbdc',
+  'Sadge':     '5e0fa9d40550d42106b8a489',
+  'copium':    '5f64475bd7160803d895a112',
+};
+
+// Merge hardcoded emotes with BTTV global emotes fetched by background.js
+let bttvEmoteMap = { ...BTTV_SHARED_EMOTES };
+chrome.storage.local.get('bttvEmotes', ({ bttvEmotes }) => {
+  if (bttvEmotes?.map) bttvEmoteMap = { ...bttvEmotes.map, ...BTTV_SHARED_EMOTES };
 });
 
 // ── Username pool ────────────────────────────────────────
@@ -146,10 +169,13 @@ function injectSidebar() {
   sidebar.innerHTML = `
     <div id="ftc-drag-handle"></div>
     <div id="ftc-header">
-      <span id="ftc-title">&#128172; Chat</span>
-      <div id="ftc-controls">
-        <button id="ftc-pause" title="Pause chat">⏸</button>
+      <div id="ftc-header-left">
+        <span id="ftc-title">&#128172; Chat</span>
+        <button id="ftc-pause" title="Pause chat"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg></button>
+        <button id="ftc-theme" title="Toggle dark mode"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg></button>
         <button id="ftc-clip" title="Save clip"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg></button>
+      </div>
+      <div id="ftc-controls">
         <span id="ftc-status">connecting...</span>
         <button id="ftc-close" title="Close">&#x2715;</button>
       </div>
@@ -163,12 +189,20 @@ function injectSidebar() {
   document.body.appendChild(sidebar);
 
   // Load saved width
-  chrome.storage.local.get(['sidebarWidth', 'fontSize'], ({ sidebarWidth, fontSize }) => {
+  chrome.storage.local.get(['sidebarWidth', 'fontSize', 'sidebarTheme'], ({ sidebarWidth, fontSize, sidebarTheme }) => {
     if (sidebarWidth) sidebar.style.width = sidebarWidth + 'px';
     if (fontSize) applyFontSize(fontSize);
+    if (sidebarTheme) applyTheme(sidebarTheme);
   });
 
   document.getElementById('ftc-close').addEventListener('click', () => disable());
+
+  document.getElementById('ftc-theme').addEventListener('click', () => {
+    const cycle = { auto: 'dark', dark: 'light', light: 'auto' };
+    const next = cycle[currentTheme] || 'dark';
+    applyTheme(next);
+    chrome.storage.local.set({ sidebarTheme: next });
+  });
 
   document.getElementById('ftc-pause').addEventListener('click', () => {
     isPaused ? resumeChat() : pauseChat();
@@ -187,6 +221,17 @@ function injectSidebar() {
   inputEl.addEventListener('keypress', (e) => e.stopPropagation());
 
   initDragHandle();
+}
+
+function addNavSeparator() {
+  const messagesEl = document.getElementById('ftc-messages');
+  if (!messagesEl) return;
+  const hostname = window.location.hostname.replace(/^www\./, '');
+  const sep = document.createElement('div');
+  sep.className = 'ftc-nav-sep';
+  sep.dataset.host = hostname;
+  messagesEl.appendChild(sep);
+  messagesEl.scrollTop = messagesEl.scrollHeight;
 }
 
 function removeSidebar() {
@@ -208,6 +253,33 @@ function applyFontSize(size) {
   sidebar.style.setProperty('--ftc-font-size', size + 'px');
 }
 
+const THEME_ICONS = {
+  auto: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>`,
+  dark: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>`,
+  light: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>`
+};
+
+const THEME_TITLES = {
+  auto:  'Force dark mode',
+  dark:  'Force light mode',
+  light: 'Reset to system theme'
+};
+
+function applyTheme(theme) {
+  currentTheme = theme;
+  if (!sidebar) return;
+  if (theme === 'auto') {
+    delete sidebar.dataset.theme;
+  } else {
+    sidebar.dataset.theme = theme;
+  }
+  const btn = document.getElementById('ftc-theme');
+  if (!btn) return;
+  btn.innerHTML = THEME_ICONS[theme];
+  btn.title = THEME_TITLES[theme];
+  btn.classList.toggle('ftc-theme-active', theme !== 'auto');
+}
+
 function addMessage(text, isUser = false) {
   const messagesEl = document.getElementById('ftc-messages');
   if (!messagesEl) return;
@@ -225,10 +297,13 @@ function addMessage(text, isUser = false) {
   } else {
     const username = getRandomUsername();
     const color = getUsernameColor(username);
-    msg.innerHTML = `<span class="ftc-username" style="color:${color}">${username}</span><span class="ftc-text">${escapeHtml(text)}</span><span class="ftc-ts">${time}</span>`;
+    msg.innerHTML = `<span class="ftc-username" style="color:${color}">${username}</span><span class="ftc-text">${renderEmotes(escapeHtml(text))}</span><span class="ftc-ts">${time}</span>`;
   }
 
   messagesEl.appendChild(msg);
+  msg.querySelectorAll('.ftc-emote').forEach(img => {
+    img.addEventListener('error', () => img.remove());
+  });
 
   // Track history for AI context (skip system error messages)
   if (!text.startsWith('⚠️')) {
@@ -251,6 +326,20 @@ function escapeHtml(str) {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
+}
+
+function renderEmotes(escapedText) {
+  if (!Object.keys(bttvEmoteMap).length) return escapedText;
+  return escapedText.split(' ').map(token => {
+    // Strip trailing punctuation before lookup so "KEKW!" still matches
+    const clean = token.replace(/[.,!?]+$/, '');
+    const suffix = token.slice(clean.length);
+    if (bttvEmoteMap[clean]) {
+      const url = `https://cdn.betterttv.net/emote/${bttvEmoteMap[clean]}/1x`;
+      return `<img src="${url}" class="ftc-emote" alt="${clean}" title="${clean}">${suffix}`;
+    }
+    return token;
+  }).join(' ');
 }
 
 function sanitizeContext(str) {
@@ -297,14 +386,14 @@ function pauseChat() {
   clearTimeout(schedulerTimer);
   clearTimeout(fetchTimer);
   const btn = document.getElementById('ftc-pause');
-  if (btn) { btn.textContent = '▶'; btn.title = 'Resume chat'; }
+  if (btn) { btn.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>'; btn.title = 'Resume chat'; }
   setStatus('paused');
 }
 
 function resumeChat() {
   isPaused = false;
   const btn = document.getElementById('ftc-pause');
-  if (btn) { btn.textContent = '⏸'; btn.title = 'Pause chat'; }
+  if (btn) { btn.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>'; btn.title = 'Pause chat'; }
   startMessageDrip();
   if (currentTier !== 'free') fetchAndSchedule();
 }
@@ -592,10 +681,10 @@ function getGenericContext() {
 
 // ── Message scheduler ────────────────────────────────────
 
-const PREFETCH_THRESHOLD  = { standard: 5,  constant: 15 };
-const FETCH_INTERVAL_MS   = { standard: 40000, constant: 25000 };
-const DRIP_MIN_MS         = { standard: 300, constant: 150 };
-const DRIP_RANGE_MS       = { standard: 1400, constant: 900 };
+const PREFETCH_THRESHOLD  = { standard: 5,  constant: 20 };
+const FETCH_INTERVAL_MS   = { standard: 40000, constant: 20000 };
+const DRIP_MIN_MS         = { standard: 300, constant: 300 };
+const DRIP_RANGE_MS       = { standard: 1400, constant: 1400 };
 
 function scheduleMessages(messages) {
   messageQueue.push(...messages);
@@ -702,6 +791,7 @@ async function accumulateUsage(usage) {
 function enable() {
   isEnabled = true;
   isPaused = false;
+  chrome.storage.local.set({ ftcAutoEnabled: true });
   injectSidebar();
   startMessageDrip();
   if (currentTier !== 'free') {
@@ -715,6 +805,7 @@ function enable() {
 function disable() {
   isEnabled = false;
   isPaused = false;
+  chrome.storage.local.set({ ftcAutoEnabled: false });
   clearTimeout(schedulerTimer);
   clearTimeout(fetchTimer);
   messageQueue = [];
@@ -744,14 +835,16 @@ setInterval(() => {
   if (location.href !== lastUrl) {
     lastUrl = location.href;
     messageQueue = [];
-    chatHistory = [];
+    chatHistory = []; // clear AI context on navigation — visible messages stay, but AI gets a clean slate for the new page
     clearTimeout(fetchTimer);
     clearTimeout(urlChangeTimer);
-    isFetching = false;
     fetchGeneration++;
+    isFetching = true; // block drip loop from fetching with stale DOM context
+    addNavSeparator();
     urlChangeTimer = setTimeout(() => {
+      isFetching = false;
       if (isEnabled && currentTier !== 'free' && !isPaused) fetchAndSchedule();
-    }, 1500);
+    }, 1000);
   }
 }, 1000);
 
@@ -818,4 +911,22 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     chrome.storage.local.set({ fontSize: message.fontSize });
     sendResponse({ ok: true });
   }
+});
+
+// ── Auto-enable on navigation ─────────────────────────────
+// If the user had chat active and navigated to a new page (full reload),
+// re-enable automatically using the stored site settings.
+
+chrome.storage.local.get(['ftcAutoEnabled', 'sidebarTheme'], ({ ftcAutoEnabled, sidebarTheme }) => {
+  if (!ftcAutoEnabled) return;
+  const host = window.location.hostname;
+  chrome.storage.local.get(`site:${host}`, (result) => {
+    const s = result[`site:${host}`] || {};
+    if (s.mode)              currentMode      = s.mode;
+    if (s.tier)              currentTier      = s.tier;
+    if (s.intensity != null) currentIntensity = s.intensity;
+    if (s.fontSize)          currentFontSize  = s.fontSize;
+    if (sidebarTheme)        currentTheme     = sidebarTheme;
+    enable();
+  });
 });

@@ -1,4 +1,28 @@
 const CLAUDE_API_URL = 'https://api.anthropic.com/v1/messages';
+const BTTV_API_URL   = 'https://api.betterttv.net/3/cached/emotes/global';
+const BTTV_CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours
+
+// Fetches BTTV global emotes and caches only the API result.
+// Hardcoded shared emotes live in content.js so they update immediately on reload.
+async function loadBttvEmotes() {
+  const { bttvEmotes } = await chrome.storage.local.get('bttvEmotes');
+  if (bttvEmotes && Date.now() - bttvEmotes.fetchedAt < BTTV_CACHE_TTL) return;
+
+  try {
+    const res = await fetch(BTTV_API_URL);
+    if (!res.ok) return;
+    const emotes = await res.json();
+    const map = {};
+    for (const e of emotes) map[e.code] = e.id;
+    chrome.storage.local.set({ bttvEmotes: { map, fetchedAt: Date.now() } });
+  } catch (_) {}
+}
+
+chrome.runtime.onInstalled.addListener(() => loadBttvEmotes());
+chrome.runtime.onStartup.addListener(() => {
+  chrome.storage.local.set({ ftcAutoEnabled: false });
+  loadBttvEmotes();
+});
 
 const SYSTEM_PROMPT = `You are simulating a fast-moving Twitch chat.
 Your job is to generate short, chaotic, realistic Twitch-style chat messages reacting to a moment.
@@ -8,7 +32,7 @@ Rules:
 - Use slang, memes, and informal language
 - Do NOT write full sentences unless it feels natural
 - Some messages should be repetitive or similar
-- Include occasional emote-style words (e.g. KEKW, LUL, Pog, W, L, PauseChamp, OMEGALUL, copium, GIGACHAD)
+- Include occasional Twitch emotes — use EXACT casing as shown, they are case-sensitive: KEKW, OMEGALUL, LULW, Pog, PogChamp, PauseChamp, FeelsBadMan, FeelsGoodMan, monkaS, haHAA, catJAM, SourPls, W, L, copium, GIGACHAD
 - Some users should repeat the same message in slightly different ways
 - Mix lowercase and uppercase messages
 - Do NOT explain anything
@@ -25,6 +49,7 @@ Behavior:
 - If a streamer name is provided, occasionally address them by name naturally (not every message)
 - If recent chat history is provided, build on it — reference jokes, continue threads, feel like the same conversation
 - If the streamer sent a message, have multiple chatters react to it specifically
+- The current page context is always the primary subject. Recent chat history is for continuity only — never let it override or distract from what is currently on the page
 
 Output format:
 Return ONLY a valid JSON array of strings.
@@ -96,7 +121,7 @@ const INTENSITY_DESCRIPTIONS = {
   7:  'very strong — leaning into extremes, little restraint',
   8:  'intense — exaggerated and over the top',
   9:  'extreme — nearly unhinged, pushed as far as reasonable',
-  10: 'maximum — take the personality to its absolute limit, nothing held back, fully unhinged'
+  10: 'maximum — take the personality to its absolute limit, nothing held back, fully unhinged. Messages must still react to the page content, just with zero restraint on the personality'
 };
 
 function sanitizeUserInput(text) {

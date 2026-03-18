@@ -4,7 +4,7 @@
   "version": "1.0",
   "description": "AI-powered fake Twitch chat overlay for any website",
   "permissions": ["storage", "tabs"],
-  "host_permissions": ["https://api.anthropic.com/*"],
+  "host_permissions": ["https://api.anthropic.com/*", "https://api.betterttv.net/*"],
   "background": {
     "service_worker": "background.js"
   },

@@ -24,7 +24,7 @@ Switch between fundamentally different chat personalities from the popup:
 | **Clueless** | Every chatter is confidently wrong about something completely different. No shared reality. |
 
 ### Intensity Slider
-A 0–10 slider controls how strongly the selected personality comes through. At 0 it's almost indistinguishable from normal chat. At 10 it's fully unhinged with nothing held back.
+A 0–10 slider controls how strongly the selected personality comes through. At 0 it's almost indistinguishable from normal chat. At 10 it's fully unhinged with nothing held back — but always reacting to what's actually on the page.
 
 ### Three Tiers
 
@@ -32,7 +32,13 @@ A 0–10 slider controls how strongly the selected personality comes through. At
 |------|-------------|------|
 | **Free** | Hardcoded message pools per mode. No API key needed. No AI. | Free |
 | **Standard** | AI-powered. Fetches 30 messages at a time, refetches every 40s, pre-fetches when queue drops below 5. Efficient and cost-aware. | ~$0.001–0.002 per fetch |
-| **Constant** | AI-powered. Fetches 50 messages at a time, refetches every 25s, pre-fetches when queue drops below 15. Faster drip speed (150–1050ms between messages vs 300–1700ms). Noticeably more active chat. | ~$0.002–0.003 per fetch |
+| **Constant** | AI-powered. Fetches 50 messages at a time, refetches every 20s, pre-fetches when queue drops below 20. Always has a large buffer ready — chat reacts faster when you type or switch pages, and never goes quiet during transitions. | ~$0.002–0.003 per fetch |
+
+### BTTV Emote Rendering
+Emote names in chat messages are replaced with real animated images sourced from the BetterTTV CDN. Supported emotes include KEKW, OMEGALUL, GIGACHAD, catJAM, Pog, PogChamp, PauseChamp, Sadge, copium, LULW, and the full BTTV global emote set (monkaS, haHAA, FeelsBadMan, FeelsGoodMan, SourPls, and more). Global emotes are fetched once from the BTTV API and cached for 24 hours — all tabs share the same cache, so there is no repeated network cost. Failed or unknown emote names vanish cleanly and fall back to plain text.
+
+### Chat Follows You Across Navigation
+Enable the chat once and it stays with you as you browse. On single-page apps (YouTube, Reddit, Twitter) a subtle separator line appears in the chat when you navigate — hover it to see which site you moved to. On full page navigations the chat auto-enables on the new page using your saved settings. The AI context resets on each navigation so the chat immediately reacts to the new page rather than carrying over references from the previous one. The auto-enable flag clears when you close the browser, so the chat never starts unexpectedly on a fresh session.
 
 ### Chat Memory with Time-Based Decay
 Each AI fetch includes the last 10 messages from the past 90 seconds as context. Claude uses this to build on running jokes, reference what was just said, and feel like a continuous conversation rather than 30 unrelated one-liners. Messages older than 90 seconds naturally fade from context, preventing the chat from looping on a single topic indefinitely.
@@ -60,12 +66,10 @@ All extracted content is sanitized before being sent to the API — newlines are
 ### Per-Site Settings
 Mode, tier, intensity, and font size are saved per hostname. Visiting YouTube will restore your YouTube settings; Reddit restores your Reddit settings. Automatically applied when you open the popup on a known site.
 
-### SPA Navigation Detection
-Single-page apps (YouTube, Reddit, Twitter) don't reload the page on navigation. The extension detects URL changes via polling, waits 1500ms for the DOM to settle, then fetches fresh context. Chat history and the message queue are cleared on navigation so old content doesn't bleed into a new page.
-
 ### Sidebar Controls
 - **Drag to resize** — grab the left edge of the sidebar and drag to any width between 220–520px. Width is saved to storage.
 - **Pause / Resume** — pause the message drip without disabling the extension. Pre-fetching also pauses.
+- **Theme toggle** — cycles between system theme, forced dark, and forced light. Persists across sessions.
 - **Clip** — takes the last 12 messages and renders them to a 2× resolution PNG card, which downloads directly. Ready to paste into Discord, post on Twitter, or share anywhere.
 - **Font size** — S / M / L buttons in the popup (11px / 13px / 15px), saved per site.
 - **Keyboard shortcut** — `Alt+T` toggles the sidebar from anywhere without opening the popup.
@@ -87,7 +91,7 @@ popup.html / popup.js         — Extension popup UI (controls, settings, stats)
 options.html / options.js     — API key + streamer name settings page
 content.js                    — Injected into every page (sidebar, logic, context reading)
 sidebar.css                   — Sidebar styles (scoped to #ftc-sidebar)
-background.js                 — Service worker (API calls to Claude)
+background.js                 — Service worker (API calls to Claude, BTTV emote cache)
 manifest.json                 — Extension manifest (MV3)
 ```
 
@@ -101,8 +105,9 @@ manifest.json                 — Extension manifest (MV3)
 4. background.js calls the Claude Haiku API with a crafted system + user prompt
 5. Claude returns a JSON array of 30–50 chat message strings
 6. content.js queues the messages and drips them into the sidebar
-   — random delay between messages (150–1700ms depending on tier)
+   — random delay between messages (300–1700ms)
    — 20% chance of a burst (2–3 messages at once)
+   — emote names are replaced with BTTV images before rendering
 7. When the queue runs low, a new fetch is triggered automatically
 ```
 
@@ -115,14 +120,14 @@ Each API call uses a fixed system prompt defining Twitch chat behavior rules, an
 - Chat personality modifier for the selected mode
 - Intensity level (0–10) with a plain-English description
 - Streamer name (if set)
-- Recent chat history (last 10 messages, max 90 seconds old)
+- Recent chat history (last 10 messages, max 90 seconds old, cleared on navigation)
 - The streamer's typed message, if any
 
 ### Security
 - **API key** stored in `chrome.storage.local` — sandboxed to the extension, never sent anywhere except `api.anthropic.com`
 - **User input sanitized** before being embedded in the prompt — newlines, tabs, and angle brackets are stripped to prevent prompt injection
 - **Page content sanitized** — all six context extractors flatten newlines from extracted DOM text before it reaches the prompt
-- **XSS prevention** — all text rendered in the sidebar and the clip card is HTML-escaped. Color values from the DOM are filtered to valid CSS characters only.
+- **XSS prevention** — all text rendered in the sidebar and the clip card is HTML-escaped before any emote substitution occurs
 - **Content policy** — Claude Haiku will not generate slurs, explicit content, or genuinely harmful messages regardless of the selected personality mode
 
 ---
@@ -145,11 +150,12 @@ Each API call uses a fixed system prompt defining Twitch chat behavior rules, an
 
 - **Free tier** works out of the box — no API key needed. Messages are hardcoded but still react to personality mode.
 - **Standard tier** is the sweet spot for regular use. Cost is negligible for personal browsing.
-- **Constant tier** is for when you want the chat to feel like a live stream — faster pace, bigger batches, more variety.
+- **Constant tier** is for when you want the chat to always feel ready — bigger buffer, faster context pickup, no quiet gaps when you navigate or type.
 - The **Clueless** mode works best on sites with recognizable content (YouTube, GitHub, news articles) because the contrast between what's on screen and what chat thinks is happening is funnier.
 - **Type something** in the input bar — the chat reacting to you personally is one of the best parts.
 - The **clip button** (camera icon) is great for sharing funny moments. It renders a clean PNG card of the last 12 messages.
 - Use `Alt+T` to toggle the sidebar without interrupting whatever you're doing.
+- The **theme toggle** (moon/sun icon) is useful if the sidebar's auto theme doesn't match what you want — cycles through system, dark, and light.
 
 ---
 
@@ -157,7 +163,6 @@ Each API call uses a fixed system prompt defining Twitch chat behavior rules, an
 
 - **Hosted API proxy** — removes the need for users to bring their own Anthropic API key. Rate-limited per user.
 - **Chrome Web Store listing** — public install link for friends and wider sharing.
-- **Emote rendering** — render known Twitch emote names (KEKW, PogChamp, etc.) as styled badges or images inline.
 - **More context sources** — Netflix, Spotify, news sites, Google Docs.
 
 ---
@@ -173,6 +178,6 @@ All AI tiers use **Claude Haiku** (`claude-haiku-4-5-20251001`).
 | Per fetch (Constant, ~50 msgs) | ~650–850 tokens | ~400–500 tokens |
 | Cost per fetch | ~$0.0015–0.002 | |
 | 1 hour of Standard use (~90 fetches) | ~$0.13–0.18 | |
-| 1 hour of Constant use (~144 fetches) | ~$0.22–0.30 | |
+| 1 hour of Constant use (~180 fetches) | ~$0.27–0.36 | |
 
 Actual costs vary based on page content length and history size. The usage tracker in the popup shows your running total since the last reset.
