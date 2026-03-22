@@ -1079,6 +1079,7 @@ function disable() {
   isEnabled = false;
   isPaused = false;
   isCollapsed = false;
+  isFetching = false;
   chrome.runtime.sendMessage({ type: 'SET_TAB_ENABLED', enabled: false }, () => { void chrome.runtime.lastError; });
   clearTimeout(schedulerTimer);
   clearTimeout(fetchTimer);
