@@ -3,7 +3,7 @@
 A Chrome extension that injects a live, AI-powered Twitch-style chat sidebar into any webpage. The chat reads the content of whatever you're looking at (a YouTube video, a Reddit post, a GitHub repo, a news article) and generates realistic, chaotic, and occasionally hilarious fake Twitch chat messages reacting to it in real time.
 
 <p align="center">
-  <a href="https://buymeacoffee.com/sundeberg"><img src="https://img.shields.io/badge/Buy%20me%20a%20coffee-Support%20this%20project-FFDD00?style=flat&logo=buy-me-a-coffee&logoColor=black" alt="Buy Me a Coffee"></a>
+  <a href="https://buymeacoffee.com/sundeberg"><img src="https://img.shields.io/badge/Buy%20me%20a%20coffee-9147ff?style=for-the-badge&logo=buy-me-a-coffee&logoColor=white" alt="Buy Me a Coffee"></a>
 </p>
 
 > Contributions go toward running a hosted API proxy so users never need to bring their own API key.
