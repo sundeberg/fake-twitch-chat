@@ -2,7 +2,9 @@
 
 A Chrome extension that injects a live, AI-powered Twitch-style chat sidebar into any webpage. The chat reads the content of whatever you're looking at (a YouTube video, a Reddit post, a GitHub repo, a news article) and generates realistic, chaotic, and occasionally hilarious fake Twitch chat messages reacting to it in real time.
 
-[![Buy Me a Coffee](https://img.shields.io/badge/Buy%20me%20a%20coffee-Support%20this%20project-FFDD00?style=flat&logo=buy-me-a-coffee&logoColor=black)](https://buymeacoffee.com/sundeberg)
+<p align="center">
+  <a href="https://buymeacoffee.com/sundeberg"><img src="https://img.shields.io/badge/Buy%20me%20a%20coffee-Support%20this%20project-FFDD00?style=flat&logo=buy-me-a-coffee&logoColor=black" alt="Buy Me a Coffee"></a>
+</p>
 
 > Contributions go toward running a hosted API proxy so users never need to bring their own API key.
 
@@ -49,7 +51,7 @@ Enable the chat once and it stays with you as you browse. On single-page apps (Y
 Each AI fetch includes recent messages as context. In Standard, the last 10 messages from the past 90 seconds are included. In Turbo, the last 20 messages from the past 120 seconds are included, giving chatters more to respond to each other with. Messages older than the window naturally fade from context, preventing the chat from looping on a single topic indefinitely.
 
 ### Turbo Inter-Chatter Dynamics
-In Turbo mode, the AI receives the full chat history with usernames attached (e.g. `[pogmaster3000]: bro this is fire`). This lets chatters call each other out by name, agree or disagree with specific people, and build running threads, all grounded in what is on screen. Inter-chatter responses only kick in after 5 real messages have accumulated, preventing hallucinated conversations on cold start.
+In Turbo mode, the AI receives recent chat history with usernames attached (e.g. `[pogmaster3000]: bro this is fire`). This lets chatters call each other out by name, agree or disagree with specific people, and build running threads, all grounded in what is on screen. Inter-chatter responses only kick in after 5 real messages have accumulated, preventing hallucinated conversations on cold start.
 
 ### You Can Talk to the Chat
 A message input bar sits at the bottom of the sidebar. Type something and press Enter or click send. Your message appears immediately in chat with a purple accent and your streamer name, and the next AI batch reacts specifically to what you said.
@@ -64,13 +66,13 @@ The extension reads different things depending on what site you are on:
 |------|--------------|
 | **YouTube** | Video title, channel name, description excerpt, current chapter |
 | **Reddit** | Post title, post body, top 3 comments (top-level only, replies excluded) |
-| **Twitter / X** | Author name, up to 2 visible tweet texts |
+| **Twitter / X** | Account name, text of up to 2 visible tweets |
 | **GitHub** | Repo name, description, README excerpt |
 | **Twitch** | Streamer name, stream title, game |
 | **Wikipedia** | Article title, opening paragraph |
-| **Netflix** | Show or movie name, whether a watch session is active |
+| **Netflix** | Show or movie name; "Watching on Netflix" when on a watch page |
 | **Google Docs / Sheets / Slides** | Page title, whatever text is available in the page shell |
-| **Everything else** | Page title, meta description, first 3 article paragraphs |
+| **Everything else** | Page title, article body text (up to 3 paragraphs), falling back to meta description |
 
 All extracted content is sanitized before being sent to the API. Character limits are applied to all fields (150 chars for titles, 800 chars for descriptions) to keep prompts focused and costs predictable.
 
@@ -122,7 +124,7 @@ The popup shows estimated cost, total API calls, and total tokens used since the
 8. When the queue drops below the prefetch threshold (5 messages in Standard, 8 in Turbo), a new fetch is triggered automatically so the chat never runs dry.
 
 ### Turbo Mode Prompt Design
-In Turbo, the AI receives the full chat history with usernames attached and is instructed to make approximately 30% of messages chatters responding to each other by name. The remaining 70% react to the page content as normal. The inter-chatter instruction is only injected when 5 or more real messages exist in history, preventing the AI from fabricating conversations on a cold start before any real chat has accumulated.
+In Turbo, the AI receives recent chat history with usernames attached and is instructed to make approximately 30% of messages chatters responding to each other by name. The remaining 70% react to the page content as normal. The inter-chatter instruction is only injected when 5 or more real messages exist in history, preventing the AI from fabricating conversations on a cold start before any real chat has accumulated.
 
 ### Fetch Generation System
 Every fetch call captures the current `fetchGeneration` counter before firing. If the URL changes or the mode is switched while a fetch is in-flight, the counter increments. When the response arrives, it is silently discarded if its generation does not match the current one. This prevents stale responses from a previous page appearing in the new chat.
@@ -168,13 +170,13 @@ The extension does not scrape raw page content. It targets specific structural e
 |------|-----------|
 | YouTube | Video title, channel name, description excerpt, current chapter |
 | Reddit | Post title, post body (capped), top 3 comments (top-level only, replies excluded) |
-| Twitter / X | Author name, up to 2 visible tweet texts |
+| Twitter / X | Account name, text of up to 2 visible tweets |
 | GitHub | Repo name, description, README excerpt |
 | Twitch | Stream title, streamer name, game |
 | Wikipedia | Article title, opening paragraph |
-| Netflix | Show or movie name only |
+| Netflix | Show or movie name; "Watching on Netflix" when on a watch page |
 | Google Docs / Sheets / Slides | Page title, whatever text is available in the page shell |
-| Everything else | Page title, meta description, first 3 article paragraphs |
+| Everything else | Page title, article body text (up to 3 paragraphs), falling back to meta description |
 
 All fields have hard character limits: 150 characters for titles, 800 characters for descriptions. Content is sanitized before being embedded in any prompt: newlines stripped to prevent prompt injection, HTML escaped before rendering to prevent XSS.
 
