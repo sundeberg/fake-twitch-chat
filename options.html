@@ -2,14 +2,14 @@
 <html>
 <head>
   <meta charset="utf-8">
-  <title>Fake Twitch Chat — Settings</title>
+  <title>Fake Twitch Chat - Settings</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
 
     body {
       max-width: 500px;
       margin: 48px auto;
-      padding: 0 24px;
+      padding: 0 24px 48px;
       font-family: Inter, -apple-system, sans-serif;
       background: #0e0e10;
       color: #efeff1;
@@ -19,11 +19,22 @@
       font-size: 20px;
       font-weight: 700;
       color: #9147ff;
-      margin-bottom: 24px;
+      margin-bottom: 32px;
+    }
+
+    .section-header {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: #6a6a6e;
+      margin: 36px 0 20px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid #2a2a2e;
     }
 
     .field {
-      margin-bottom: 20px;
+      margin-bottom: 24px;
     }
 
     label {
@@ -37,9 +48,29 @@
     }
 
     .field-hint {
-      margin-top: 5px;
+      margin-top: 6px;
       font-size: 11px;
       color: #6a6a6e;
+      line-height: 1.6;
+    }
+
+    select {
+      width: 100%;
+      padding: 10px 36px 10px 12px;
+      background: #18181b url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23adadb8' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E") no-repeat right 12px center;
+      appearance: none;
+      border: 1px solid #3a3a3e;
+      border-radius: 6px;
+      color: #efeff1;
+      font-size: 13px;
+      font-family: inherit;
+      cursor: pointer;
+      transition: border-color 0.15s;
+    }
+
+    select:focus {
+      outline: none;
+      border-color: #9147ff;
     }
 
     input[type="password"],
@@ -55,9 +86,22 @@
       transition: border-color 0.15s;
     }
 
-    input:focus {
+    input:focus, textarea:focus {
       outline: none;
       border-color: #9147ff;
+    }
+
+    textarea {
+      width: 100%;
+      padding: 10px 12px;
+      background: #18181b;
+      border: 1px solid #3a3a3e;
+      border-radius: 6px;
+      color: #efeff1;
+      font-size: 13px;
+      font-family: inherit;
+      resize: vertical;
+      transition: border-color 0.15s;
     }
 
     .show-key {
@@ -73,6 +117,116 @@
 
     .show-key:hover { color: #efeff1; }
 
+    .toggle-row {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 20px;
+    }
+
+    .toggle-row:last-child { margin-bottom: 0; }
+
+    .toggle-label {
+      font-size: 13px;
+      color: #efeff1;
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+
+    .options-switch {
+      position: relative;
+      width: 46px;
+      height: 26px;
+      flex-shrink: 0;
+    }
+    .options-switch input { opacity: 0; width: 0; height: 0; position: absolute; }
+    .options-switch .track {
+      position: absolute;
+      inset: 0;
+      background: #2a2a2e;
+      border-radius: 26px;
+      cursor: pointer;
+      border: 1px solid #3a3a3e;
+      transition: background 0.2s, border-color 0.2s;
+    }
+    .options-switch .thumb {
+      position: absolute;
+      width: 20px; height: 20px;
+      top: 3px; left: 3px;
+      background: #adadb8;
+      border-radius: 50%;
+      pointer-events: none;
+      transition: transform 0.2s, background 0.2s;
+    }
+    .options-switch input:checked ~ .track { background: #9147ff; border-color: #9147ff; }
+    .options-switch input:checked ~ .thumb { transform: translateX(20px); background: #fff; }
+
+    .list-input-row {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+
+    .list-input-row input { flex: 1; }
+
+    .whitelist-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 7px 10px;
+      background: #18181b;
+      border: 1px solid #2a2a2e;
+      border-radius: 5px;
+      margin-bottom: 5px;
+      font-size: 12px;
+      font-family: monospace;
+      color: #efeff1;
+    }
+
+    .whitelist-remove {
+      background: none;
+      border: none;
+      color: #6a6a6e;
+      cursor: pointer;
+      font-size: 18px;
+      line-height: 1;
+      padding: 0;
+      transition: color 0.15s;
+    }
+    .whitelist-remove:hover { color: #f8312f; }
+
+    .whitelist-add-btn {
+      padding: 10px 16px;
+      background: #18181b;
+      border: 1px solid #3a3a3e;
+      border-radius: 6px;
+      color: #efeff1;
+      font-size: 13px;
+      font-family: inherit;
+      font-weight: 600;
+      cursor: pointer;
+      transition: border-color 0.15s;
+      white-space: nowrap;
+    }
+    .whitelist-add-btn:hover { border-color: #9147ff; }
+
+    .warning-text {
+      font-size: 11px;
+      color: #f8312f;
+      font-weight: 600;
+      margin-bottom: 12px;
+      line-height: 1.5;
+    }
+
+    .action-row {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      flex-wrap: wrap;
+      padding-top: 8px;
+    }
+
     button[type="submit"] {
       padding: 10px 24px;
       background: #9147ff;
@@ -85,8 +239,24 @@
       transition: background 0.15s;
     }
 
-    button[type="submit"]:hover {
-      background: #7c3aed;
+    button[type="submit"]:hover { background: #7c3aed; }
+
+    button[type="button"]#clear-data {
+      padding: 10px 24px;
+      background: transparent;
+      color: #adadb8;
+      border: 1px solid #3a3a3e;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 600;
+      font-family: inherit;
+      transition: border-color 0.15s, color 0.15s;
+    }
+
+    button[type="button"]#clear-data:hover {
+      border-color: #f8312f;
+      color: #f8312f;
     }
 
     .saved {
@@ -97,6 +267,38 @@
       font-weight: 600;
     }
 
+    .log-entry {
+      margin-bottom: 6px;
+      background: #18181b;
+      border: 1px solid #2a2a2e;
+      border-radius: 6px;
+      font-size: 12px;
+      overflow: hidden;
+    }
+
+    .log-entry summary {
+      padding: 10px 14px;
+      cursor: pointer;
+      color: #efeff1;
+      font-family: monospace;
+      list-style: none;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      user-select: none;
+    }
+
+    .log-entry summary:hover { background: #1f1f23; }
+
+    .log-entry-body {
+      padding: 12px 14px;
+      border-top: 1px solid #2a2a2e;
+      color: #adadb8;
+      line-height: 1.7;
+    }
+
+    .log-entry-body strong { color: #efeff1; }
+
     .note {
       margin-top: 32px;
       font-size: 12px;
@@ -106,34 +308,132 @@
       padding-top: 20px;
     }
 
-    .note strong {
-      color: #efeff1;
-    }
+    .note strong { color: #efeff1; }
   </style>
 </head>
 <body>
-  <h2>&#128172; Fake Twitch Chat — Settings</h2>
+  <h2>&#128172; Fake Twitch Chat - Settings</h2>
 
+  <!-- ── AI Setup ── -->
   <div class="field">
-    <label for="api-key">Claude API Key</label>
+    <label for="provider">AI Provider</label>
+    <select id="provider">
+      <option value="anthropic">Anthropic (Claude Haiku)</option>
+      <option value="openai">OpenAI (GPT-4o mini)</option>
+    </select>
+  </div>
+
+  <div class="field" id="field-anthropic">
+    <label for="api-key">Anthropic API Key</label>
     <input type="password" id="api-key" placeholder="sk-ant-api03-...">
     <button class="show-key" id="toggle-visibility">Show key</button>
+    <div class="field-hint">Get your key at console.anthropic.com</div>
+  </div>
+
+  <div class="field" id="field-openai">
+    <label for="openai-key">OpenAI API Key</label>
+    <input type="password" id="openai-key" placeholder="sk-...">
+    <button class="show-key" id="toggle-visibility-openai">Show key</button>
+    <div class="field-hint">Get your key at platform.openai.com</div>
   </div>
 
   <div class="field">
-    <label for="streamer-name">Your streamer name</label>
-    <input type="text" id="streamer-name" placeholder="e.g. xMathias" maxlength="32" style="font-family: inherit;">
+    <label for="streamer-name">Your name</label>
+    <input type="text" id="streamer-name" placeholder="e.g. Streamer42" maxlength="32" style="font-family: inherit;">
     <div class="field-hint">Chat will occasionally address you by this name.</div>
   </div>
 
-  <button type="submit" id="save">Save</button>
+  <!-- ── Chat behavior ── -->
+  <div class="section-header">Chat behavior</div>
+
+  <div class="field">
+    <label for="context-size">Context size</label>
+    <select id="context-size">
+      <option value="standard">Standard (default, most sites)</option>
+      <option value="extended">Extended (longer articles and documents)</option>
+      <option value="full">Full (long-form writing and reports)</option>
+    </select>
+    <div class="field-hint">How much page content gets sent to the AI. Larger sizes help when reading long articles or documents. Cost impact is negligible.</div>
+  </div>
+
+  <div class="field">
+    <label for="custom-prompt">Custom prompt</label>
+    <textarea id="custom-prompt" rows="3" maxlength="500" placeholder="Add extra context for the AI. What is on the page, what you want the chat to focus on, or anything else."></textarea>
+    <div class="field-hint">Sent alongside the page context on every AI request. Use it to frame what the chat should focus on or react to.</div>
+  </div>
+
+  <!-- ── Privacy and security ── -->
+  <div class="section-header">Privacy and security</div>
+
+  <div class="field">
+    <div class="toggle-row">
+      <div>
+        <div class="toggle-label">Whitelist only mode</div>
+        <div class="field-hint">Only run on sites you explicitly allow. Chat is locked everywhere else.</div>
+      </div>
+      <label class="options-switch" style="margin-top:2px;">
+        <input type="checkbox" id="whitelist-mode">
+        <div class="track"></div>
+        <div class="thumb"></div>
+      </label>
+    </div>
+    <div id="whitelist-section" style="display:none; margin-bottom:16px;">
+      <div class="list-input-row">
+        <input type="text" id="whitelist-input" placeholder="e.g. reddit.com">
+        <button type="button" class="whitelist-add-btn" id="whitelist-add">Add</button>
+      </div>
+      <div id="whitelist-list"></div>
+      <div class="field-hint" style="margin-top:6px;">Enter hostnames without www.</div>
+    </div>
+    <div class="toggle-row">
+      <div>
+        <div class="toggle-label">Consent prompt on new sites</div>
+        <div class="field-hint">Before the first API call on any site, show a preview of what will be sent. Turn off for a smoother experience.</div>
+      </div>
+      <label class="options-switch" style="margin-top:2px;">
+        <input type="checkbox" id="consent-gate-toggle" checked>
+        <div class="track"></div>
+        <div class="thumb"></div>
+      </label>
+    </div>
+  </div>
+
+  <div class="field">
+    <div style="font-size:13px; color:#efeff1; font-weight:600; margin-bottom:6px;">Custom blocked sites</div>
+    <div class="field-hint" style="margin-bottom:12px;">Sites added here always show the sensitive site warning before enabling. Paste a URL or enter a hostname.</div>
+    <div class="list-input-row">
+      <input type="text" id="blocklist-input" placeholder="e.g. mybank.com">
+      <button type="button" class="whitelist-add-btn" id="blocklist-add">Add</button>
+    </div>
+    <div id="blocklist-list"></div>
+  </div>
+
+
+  <!-- ── Actions ── -->
+  <div class="section-header">Actions</div>
+
+  <div class="action-row">
+    <button type="submit" id="save">Save</button>
+    <button type="button" id="clear-data">Clear all data</button>
+  </div>
   <div class="saved" id="saved-msg">&#10003; Saved!</div>
+  <div class="saved" id="cleared-msg" style="color:#f8312f;">&#10003; All data cleared.</div>
+
+  <!-- ── Context log ── -->
+  <div id="log-toggle" style="display:flex; justify-content:space-between; align-items:center; margin-top:36px; margin-bottom:0; cursor:pointer;">
+    <span style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:1px; color:#6a6a6e;">Context log</span>
+    <button type="button" id="log-toggle-label" style="font-size:12px; font-weight:600; padding:4px 12px; background:transparent; border:1px solid #3a3a3e; border-radius:5px; color:#adadb8; cursor:pointer; font-family:inherit; transition:border-color 0.15s, color 0.15s;">Show</button>
+  </div>
+  <div id="log-divider" style="display:none; height:1px; background:#2a2a2e; margin-top:10px;"></div>
+
+  <div id="log-section" style="display:none;">
+    <div class="field-hint" style="margin-bottom:12px;">Last 20 successful AI fetches. Shows exactly what was sent each time.</div>
+    <button type="button" id="clear-log" style="font-size:12px; padding:7px 14px; background:transparent; border:1px solid #3a3a3e; border-radius:5px; color:#adadb8; cursor:pointer; font-family:inherit; margin-bottom:14px;">Clear log</button>
+    <div id="log-list"></div>
+  </div>
 
   <div class="note">
-    <strong>Your key stays on your device.</strong> It is stored in Chrome's local extension storage
-    and only ever sent directly to <strong>api.anthropic.com</strong> — never to any other server.<br><br>
-    Get your key at <strong>console.anthropic.com</strong> → API Keys.
-    The extension uses <strong>claude-haiku</strong> to keep costs very low.
+    <strong>Your keys stay on your device.</strong> They are stored in Chrome's local extension storage and only ever sent directly to the respective AI provider, never to any other server.
   </div>
 
   <script src="options.js"></script>
