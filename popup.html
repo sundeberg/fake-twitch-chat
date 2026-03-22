@@ -21,7 +21,7 @@
     }
 
     @media (prefers-color-scheme: light) {
-      :root {
+      :root:not([data-theme]) {
         --bg:       #f7f7f8;
         --bg2:      #efeff1;
         --bg3:      #e8e8eb;
@@ -34,6 +34,34 @@
         --accent-bg:#f0eaff;
         --danger:   #d9342f;
       }
+    }
+
+    :root[data-theme="dark"] {
+      --bg:       #0e0e10;
+      --bg2:      #18181b;
+      --bg3:      #1f1f23;
+      --border:   #2a2a2e;
+      --border2:  #3a3a3e;
+      --text:     #efeff1;
+      --sub:      #adadb8;
+      --muted:    #6a6a6e;
+      --accent:   #9147ff;
+      --accent-bg:#1a0a2e;
+      --danger:   #f8312f;
+    }
+
+    :root[data-theme="light"] {
+      --bg:       #f7f7f8;
+      --bg2:      #efeff1;
+      --bg3:      #e8e8eb;
+      --border:   #d4d4d8;
+      --border2:  #adadb8;
+      --text:     #0e0e10;
+      --sub:      #53535f;
+      --muted:    #8a8a90;
+      --accent:   #9147ff;
+      --accent-bg:#f0eaff;
+      --danger:   #d9342f;
     }
 
     body {
@@ -243,7 +271,7 @@
       background: var(--accent-bg);
     }
 
-    .tier-desc { font-size: 10px; color: var(--muted); margin-top: 5px; min-height: 14px; }
+    .tier-desc { font-size: 10px; color: var(--sub); margin-top: 5px; min-height: 14px; }
 
     /* ── Mode select ── */
     .mode-section { padding: 0 16px 14px; }
@@ -499,19 +527,38 @@
 
   <div class="divider"></div>
 
+  <div id="whitelist-blocked" style="display:none; padding:10px 16px 14px;">
+    <div style="font-size:11px; color:var(--sub); line-height:1.5; margin-bottom:8px;">
+      Whitelist mode is on. This site is not allowed.
+    </div>
+    <button id="add-to-whitelist" style="width:100%; padding:7px 10px; background:none; border:1px solid var(--border); border-radius:6px; color:var(--sub); font-size:12px; font-family:inherit; cursor:pointer; transition:border-color 0.15s, color 0.15s;">
+      + Add this site to whitelist
+    </button>
+  </div>
+
+  <div id="sensitive-blocked" style="display:none; padding:10px 16px 14px;">
+    <div style="font-size:11px; color:var(--sub); line-height:1.6; margin-bottom:10px;">
+      <strong style="color:var(--danger);">Sensitive site</strong><br>
+      This looks like a <span id="sensitive-site-label"></span>. Page content may include personal information. Only enable if you trust this extension on this site.
+    </div>
+    <button id="sensitive-enable-anyway" style="width:100%; padding:8px 10px; background:var(--danger); border:none; border-radius:6px; color:#fff; font-size:12px; font-weight:600; font-family:inherit; cursor:pointer; opacity:0.9; transition:opacity 0.15s;">
+      Enable on this site
+    </button>
+  </div>
+
   <div class="section" style="padding-bottom:0;">
     <span class="section-label">Tier</span>
     <div class="tier-btns">
       <button class="tier-btn active" data-tier="free">Free</button>
       <button class="tier-btn" data-tier="standard">Standard</button>
-      <button class="tier-btn" data-tier="constant">Constant</button>
+      <button class="tier-btn" data-tier="turbo">Turbo</button>
     </div>
     <div class="tier-desc" id="tier-desc">No API key needed. Hardcoded messages.</div>
   </div>
 
   <div class="divider" style="margin-top:14px;"></div>
 
-  <div class="reload-hint" id="reload-hint">
+  <div class="reload-hint" id="reload-hint" style="margin-top:14px;">
     <div class="reload-hint-row">
       <div class="reload-hint-text">
         <span class="reload-hint-icon">&#9888;&#65039;</span>

@@ -1,3 +1,7 @@
+chrome.storage.local.get('sidebarTheme', ({ sidebarTheme }) => {
+  if (sidebarTheme) document.documentElement.dataset.theme = sidebarTheme;
+});
+
 const toggle    = document.getElementById('toggle');
 const liveBadge = document.getElementById('live-badge');
 const liveText  = document.getElementById('live-text');
@@ -7,7 +11,34 @@ const toggleSub = document.getElementById('toggle-sub');
 
 const reloadHint = document.getElementById('reload-hint');
 
-function showReloadHint() {
+const reloadMsg = document.getElementById('reload-msg');
+const reloadBtn = document.getElementById('reload-tab-btn');
+
+let costHintTimer = null;
+
+function showCostHint() {
+  if (reloadHint.style.display === 'block') return;
+  reloadMsg.textContent = 'Heads up: ~3x the token usage of Standard.';
+  reloadBtn.style.display = 'none';
+  reloadHint.style.display = 'block';
+  clearTimeout(costHintTimer);
+  costHintTimer = setTimeout(() => {
+    reloadHint.style.display = 'none';
+    reloadBtn.style.display = '';
+  }, 3000);
+}
+
+function isRestrictedUrl(url) {
+  if (!url) return true;
+  return url.startsWith('chrome://') ||
+         url.startsWith('chrome-extension://') ||
+         url.startsWith('about:') ||
+         url.startsWith('devtools://');
+}
+
+function showReloadHint(message, showButton = true) {
+  reloadMsg.textContent = message || 'Reload this tab to activate.';
+  reloadBtn.style.display = showButton ? '' : 'none';
   reloadHint.style.display = 'block';
 }
 
@@ -29,7 +60,8 @@ document.getElementById('reload-tab-btn').addEventListener('click', async () => 
 });
 
 function setUI(enabled) {
-  toggle.checked = enabled;
+  toggle.checked  = enabled;
+  toggle.disabled = false;
   liveBadge.classList.toggle('active', enabled);
   liveText.textContent  = enabled ? 'Live' : 'Off';
   toggleSub.textContent = enabled ? 'Chat is active on this page' : 'Chat is inactive';
@@ -38,9 +70,9 @@ function setUI(enabled) {
 // ── Tier selector ─────────────────────────────────────────
 
 const TIER_DESCRIPTIONS = {
-  free:     'No API key needed. Hardcoded messages.',
-  standard: 'AI-powered. Batched fetches, minimal idle gap.',
-  constant: 'AI-powered. Always pre-fetching, no gaps.'
+  free:     'No API key needed. Hardcoded message pool.',
+  standard: 'AI-powered. Reacts to what\'s on screen.',
+  turbo:    'Chatters argue, agree, and react to each other.'
 };
 
 function setTierUI(tier) {
@@ -54,6 +86,7 @@ document.querySelectorAll('.tier-btn').forEach(btn => {
   btn.addEventListener('click', async () => {
     const tier = btn.dataset.tier;
     setTierUI(tier);
+    if (tier === 'turbo') showCostHint();
     const tab = await getActiveTab();
     chrome.tabs.sendMessage(tab.id, { type: 'SET_TIER', tier }, () => {
       void chrome.runtime.lastError;
@@ -129,8 +162,103 @@ function applyState(response) {
   if (response.streamerName) document.getElementById('streamer-name-input').value = response.streamerName;
 }
 
+// ── Sensitive site detection (must match content.js) ──────
+
+const SENSITIVE_SITES = {
+  'mail.google.com': 'email service', 'inbox.google.com': 'email service',
+  'outlook.com': 'email service', 'outlook.live.com': 'email service',
+  'outlook.office.com': 'email service', 'outlook.office365.com': 'email service',
+  'mail.yahoo.com': 'email service', 'protonmail.com': 'email service',
+  'proton.me': 'email service', 'tutanota.com': 'email service',
+  'fastmail.com': 'email service', 'icloud.com': 'email service',
+  'paypal.com': 'payment service', 'venmo.com': 'payment service',
+  'cash.app': 'payment service', 'wise.com': 'payment service',
+  'revolut.com': 'payment service', 'pay.google.com': 'payment service',
+  'payments.google.com': 'payment service', 'mobilepay.dk': 'payment service',
+  'mobilepay.fi': 'payment service',
+  'lastpass.com': 'password manager', '1password.com': 'password manager',
+  'app.1password.com': 'password manager', 'bitwarden.com': 'password manager',
+  'vault.bitwarden.com': 'password manager', 'dashlane.com': 'password manager',
+  'nordpass.com': 'password manager', 'keepersecurity.com': 'password manager',
+  'skat.dk': 'government portal', 'borger.dk': 'government portal',
+  'mitid.dk': 'digital identity service', 'e-boks.dk': 'government portal',
+};
+
+function getSensitiveCategory(hostname) {
+  if (!hostname) return null;
+  const h = hostname.replace(/^www\./, '');
+  if (SENSITIVE_SITES[h]) return SENSITIVE_SITES[h];
+  for (const domain of Object.keys(SENSITIVE_SITES)) {
+    if (h.endsWith('.' + domain)) return SENSITIVE_SITES[domain];
+  }
+  if (h.endsWith('.gov') || /\.gov\.[a-z]{2,3}$/.test(h)) return 'government portal';
+  if (h.endsWith('.bank')) return 'banking service';
+  if (h.endsWith('.mil')) return 'government portal';
+  return null;
+}
+
 async function initWithRetry(attemptsLeft = 6, delay = 300) {
   const tab = await getActiveTab();
+
+  if (isRestrictedUrl(tab?.url)) {
+    setUI(false);
+    showReloadHint("Chat can't run on browser pages.", false);
+    return;
+  }
+
+  // Whitelist check
+  const { whitelistMode, whitelist } = await new Promise(r => chrome.storage.local.get(['whitelistMode', 'whitelist'], r));
+  if (whitelistMode) {
+    const hostname = getHostname(tab)?.replace(/^www\./, '');
+    const list = whitelist || [];
+    const blocked = hostname && !list.some(h => hostname === h || hostname.endsWith('.' + h));
+    if (blocked) {
+      setUI(false);
+      toggle.disabled = true;
+      document.getElementById('whitelist-blocked').style.display = 'block';
+      document.getElementById('add-to-whitelist').addEventListener('click', () => {
+        chrome.storage.local.get('whitelist', ({ whitelist: cur }) => {
+          const updated = cur || [];
+          if (!updated.includes(hostname)) updated.push(hostname);
+          chrome.storage.local.set({ whitelist: updated }, () => {
+            document.getElementById('whitelist-blocked').style.display = 'none';
+            initWithRetry();
+          });
+        });
+      }, { once: true });
+      return;
+    }
+  }
+
+  // Sensitive site check (hardcoded list + user's custom blocklist)
+  const hostname = getHostname(tab)?.replace(/^www\./, '') || '';
+  let effectiveCategory = getSensitiveCategory(hostname);
+  if (!effectiveCategory) {
+    const { customBlocklist } = await new Promise(r => chrome.storage.local.get('customBlocklist', r));
+    const list = customBlocklist || [];
+    if (list.some(h => hostname === h || hostname.endsWith('.' + h))) {
+      effectiveCategory = 'user-blocked site';
+    }
+  }
+  if (effectiveCategory) {
+    const sensitiveCategory = effectiveCategory;
+    const siteKey = `site:${hostname}`;
+    const stored = await new Promise(r => chrome.storage.local.get(siteKey, r));
+    if (!stored[siteKey]?.sensitiveOverride) {
+      setUI(false);
+      toggle.disabled = true;
+      document.getElementById('sensitive-site-label').textContent = sensitiveCategory;
+      document.getElementById('sensitive-blocked').style.display = 'block';
+      document.getElementById('sensitive-enable-anyway').addEventListener('click', () => {
+        const existing = stored[siteKey] || {};
+        chrome.storage.local.set({ [siteKey]: { ...existing, sensitiveOverride: true } }, () => {
+          document.getElementById('sensitive-blocked').style.display = 'none';
+          initWithRetry();
+        });
+      }, { once: true });
+      return;
+    }
+  }
 
   // Load per-site settings and pre-apply to content script
   const siteSettings = await loadSiteSettings(tab);
@@ -156,7 +284,7 @@ async function initWithRetry(attemptsLeft = 6, delay = 300) {
       setTimeout(() => initWithRetry(attemptsLeft - 1, delay), delay);
     } else {
       setUI(false);
-      showReloadHint();
+      showReloadHint('Reload this tab to activate.');
     }
   });
 }
