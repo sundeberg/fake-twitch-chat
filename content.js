@@ -1,5 +1,7 @@
 let isEnabled = false;
 let isPaused = false;
+let isCollapsed = false;
+let savedSidebarWidth = 300;
 let sidebar = null;
 let messageQueue = [];
 let schedulerTimer = null;
@@ -18,6 +20,25 @@ let currentTheme = 'auto';
 // Load streamer name from storage
 chrome.storage.local.get('streamerName', ({ streamerName: name }) => {
   if (name) streamerName = name;
+});
+
+
+// Cached custom prompt — appended to page context on every AI fetch
+let customPrompt = '';
+chrome.storage.local.get('customPrompt', ({ customPrompt: p }) => {
+  customPrompt = p || '';
+});
+
+// Cached context size limit
+const CONTEXT_LIMITS = { standard: 800, extended: 2500, full: 5000 };
+let contextLimit = 800;
+chrome.storage.local.get('contextSize', ({ contextSize }) => {
+  contextLimit = CONTEXT_LIMITS[contextSize] || 800;
+});
+
+chrome.storage.onChanged.addListener((changes) => {
+  if (changes.customPrompt) customPrompt = changes.customPrompt.newValue || '';
+  if (changes.contextSize) contextLimit = CONTEXT_LIMITS[changes.contextSize.newValue] || 800;
 });
 
 // Confirmed BTTV shared emote IDs. Hardcoded here so updates take effect on
@@ -177,6 +198,7 @@ function injectSidebar() {
       </div>
       <div id="ftc-controls">
         <span id="ftc-status">connecting...</span>
+        <button id="ftc-collapse" title="Collapse"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg></button>
         <button id="ftc-close" title="Close">&#x2715;</button>
       </div>
     </div>
@@ -185,21 +207,43 @@ function injectSidebar() {
       <input type="text" id="ftc-input" placeholder="Send a message..." maxlength="200" autocomplete="off">
       <button id="ftc-send" title="Send"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg></button>
     </div>
+    <button id="ftc-expand-strip" title="Expand chat"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></button>
+    <div id="ftc-consent-gate">
+      <p class="ftc-cg-title">&#128274; What gets sent to the AI</p>
+      <p class="ftc-cg-body">Before connecting, this is the page context that will be sent to <strong id="ftc-cg-provider"></strong>. Nothing else leaves your browser.</p>
+      <div class="ftc-cg-data">
+        <div class="ftc-cg-row"><span class="ftc-cg-key">Site type</span><span class="ftc-cg-val" id="ftc-cg-type"></span></div>
+        <div class="ftc-cg-row"><span class="ftc-cg-key">Title</span><span class="ftc-cg-val" id="ftc-cg-title"></span></div>
+        <div class="ftc-cg-row"><span class="ftc-cg-key">Context excerpt</span><span class="ftc-cg-val" id="ftc-cg-desc"></span></div>
+        <div class="ftc-cg-row" id="ftc-cg-prompt-row" style="display:none"><span class="ftc-cg-key">Your prompt</span><span class="ftc-cg-val" id="ftc-cg-prompt"></span></div>
+      </div>
+      <p class="ftc-cg-body">Approval is saved for <strong id="ftc-cg-host"></strong>. You won't be asked again unless you clear data.</p>
+      <div class="ftc-cg-btns">
+        <button id="ftc-consent-allow">Allow for this site</button>
+        <button id="ftc-consent-deny">Cancel</button>
+      </div>
+    </div>
   `;
   document.body.appendChild(sidebar);
+  setPushMargin(300);
 
   // Load saved width
   chrome.storage.local.get(['sidebarWidth', 'fontSize', 'sidebarTheme'], ({ sidebarWidth, fontSize, sidebarTheme }) => {
-    if (sidebarWidth) sidebar.style.width = sidebarWidth + 'px';
+    const width = sidebarWidth || 300;
+    if (sidebarWidth) sidebar.style.width = width + 'px';
+    setPushMargin(width);
     if (fontSize) applyFontSize(fontSize);
-    if (sidebarTheme) applyTheme(sidebarTheme);
+    const theme = sidebarTheme || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+    if (!sidebarTheme) chrome.storage.local.set({ sidebarTheme: theme });
+    applyTheme(theme);
   });
 
   document.getElementById('ftc-close').addEventListener('click', () => disable());
+  document.getElementById('ftc-collapse').addEventListener('click', () => collapseSidebar());
+  document.getElementById('ftc-expand-strip').addEventListener('click', () => expandSidebar());
 
   document.getElementById('ftc-theme').addEventListener('click', () => {
-    const cycle = { auto: 'dark', dark: 'light', light: 'auto' };
-    const next = cycle[currentTheme] || 'dark';
+    const next = currentTheme === 'dark' ? 'light' : 'dark';
     applyTheme(next);
     chrome.storage.local.set({ sidebarTheme: next });
   });
@@ -226,15 +270,48 @@ function injectSidebar() {
 function addNavSeparator() {
   const messagesEl = document.getElementById('ftc-messages');
   if (!messagesEl) return;
-  const hostname = window.location.hostname.replace(/^www\./, '');
+  const rawTitle = document.title.replace(/^\(\d+\)\s*/, '').trim();
+  const label = rawTitle.length > 45 ? rawTitle.substring(0, 43) + '...' : rawTitle;
   const sep = document.createElement('div');
   sep.className = 'ftc-nav-sep';
-  sep.dataset.host = hostname;
+  sep.dataset.host = label || window.location.hostname.replace(/^www\./, '');
   messagesEl.appendChild(sep);
   messagesEl.scrollTop = messagesEl.scrollHeight;
 }
 
+function setPushMargin(width) {
+  document.body.style.marginRight = width + 'px';
+}
+
+function clearPushMargin() {
+  document.body.style.marginRight = '';
+}
+
+function collapseSidebar() {
+  if (!sidebar) return;
+  isCollapsed = true;
+  savedSidebarWidth = sidebar.offsetWidth;
+  sidebar.style.width = '36px';
+  sidebar.classList.add('ftc-collapsed');
+  setPushMargin(36);
+  clearTimeout(schedulerTimer);
+  clearTimeout(fetchTimer);
+}
+
+function expandSidebar() {
+  if (!sidebar) return;
+  isCollapsed = false;
+  sidebar.style.width = savedSidebarWidth + 'px';
+  sidebar.classList.remove('ftc-collapsed');
+  setPushMargin(savedSidebarWidth);
+  if (isEnabled && !isPaused) {
+    startMessageDrip();
+    if (currentTier !== 'free') fetchAndSchedule();
+  }
+}
+
 function removeSidebar() {
+  clearPushMargin();
   const el = document.getElementById('ftc-sidebar');
   if (el) el.remove();
   sidebar = null;
@@ -254,30 +331,23 @@ function applyFontSize(size) {
 }
 
 const THEME_ICONS = {
-  auto: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>`,
-  dark: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>`,
+  dark:  `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>`,
   light: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>`
 };
 
 const THEME_TITLES = {
-  auto:  'Force dark mode',
-  dark:  'Force light mode',
-  light: 'Reset to system theme'
+  dark:  'Switch to light mode',
+  light: 'Switch to dark mode'
 };
 
 function applyTheme(theme) {
   currentTheme = theme;
   if (!sidebar) return;
-  if (theme === 'auto') {
-    delete sidebar.dataset.theme;
-  } else {
-    sidebar.dataset.theme = theme;
-  }
+  sidebar.dataset.theme = theme;
   const btn = document.getElementById('ftc-theme');
   if (!btn) return;
   btn.innerHTML = THEME_ICONS[theme];
   btn.title = THEME_TITLES[theme];
-  btn.classList.toggle('ftc-theme-active', theme !== 'auto');
 }
 
 function addMessage(text, isUser = false) {
@@ -290,12 +360,13 @@ function addMessage(text, isUser = false) {
   const msg = document.createElement('div');
   msg.className = 'ftc-message';
 
+  const username = isUser ? null : getRandomUsername();
+
   if (isUser) {
     const displayName = streamerName || 'You';
     msg.classList.add('ftc-user-message');
     msg.innerHTML = `<span class="ftc-username ftc-you">${escapeHtml(displayName)}</span><span class="ftc-text">${escapeHtml(text)}</span><span class="ftc-ts">${time}</span>`;
   } else {
-    const username = getRandomUsername();
     const color = getUsernameColor(username);
     msg.innerHTML = `<span class="ftc-username" style="color:${color}">${username}</span><span class="ftc-text">${renderEmotes(escapeHtml(text))}</span><span class="ftc-ts">${time}</span>`;
   }
@@ -307,7 +378,9 @@ function addMessage(text, isUser = false) {
 
   // Track history for AI context (skip system error messages)
   if (!text.startsWith('⚠️')) {
-    const historyEntry = isUser ? `[${streamerName || 'Streamer'}]: ${text}` : text;
+    const historyEntry = isUser
+      ? `[${streamerName || 'Streamer'}]: ${text}`
+      : `[${username}]: ${text}`;
     chatHistory.push({ text: historyEntry, ts: Date.now() });
     if (chatHistory.length > 40) chatHistory.shift();
   }
@@ -364,6 +437,7 @@ function initDragHandle() {
     const onMove = (e) => {
       const newWidth = Math.max(220, Math.min(520, startWidth - (e.clientX - startX)));
       sidebar.style.width = newWidth + 'px';
+      setPushMargin(newWidth);
     };
 
     const onUp = () => {
@@ -554,14 +628,16 @@ function openClip() {
 // ── DOM context extractors ───────────────────────────────
 
 function getPageContext() {
-  const host = window.location.hostname;
+  const h = window.location.hostname;
+  const is = (domain) => h === domain || h.endsWith('.' + domain);
 
-  if (host.includes('youtube.com'))  return getYouTubeContext();
-  if (host.includes('reddit.com'))   return getRedditContext();
-  if (host.includes('twitter.com') || host.includes('x.com')) return getTwitterContext();
-  if (host.includes('github.com'))   return getGitHubContext();
-  if (host.includes('twitch.tv'))    return getTwitchContext();
-
+  if (is('youtube.com'))    return getYouTubeContext();
+  if (is('reddit.com'))     return getRedditContext();
+  if (is('twitter.com') || is('x.com')) return getTwitterContext();
+  if (is('github.com'))     return getGitHubContext();
+  if (is('twitch.tv'))      return getTwitchContext();
+  if (is('wikipedia.org'))  return getWikipediaContext();
+  if (is('netflix.com'))    return getNetflixContext();
   return getGenericContext();
 }
 
@@ -583,13 +659,13 @@ function getYouTubeContext() {
 
   const parts = [
     channel && `Channel: ${channel}`,
-    description.substring(0, 200),
+    description.substring(0, 500),
     chapter && `Current chapter: ${chapter}`
   ].filter(Boolean);
 
   return {
-    title: sanitizeContext(title.substring(0, 100)),
-    description: sanitizeContext(parts.join('. ').substring(0, 300)),
+    title: sanitizeContext(title.substring(0, 150)),
+    description: sanitizeContext(parts.join('. ').substring(0, contextLimit)),
     urlType: 'YouTube video'
   };
 }
@@ -604,24 +680,35 @@ function getRedditContext() {
   const postText = Array.from(document.querySelectorAll('[data-click-id="text"] p'))
     .slice(0, 2).map(p => p.textContent?.trim()).filter(Boolean).join(' ');
 
-  const topComments = Array.from(document.querySelectorAll('[data-testid="comment"]'))
-    .slice(0, 3).map(c => c.querySelector('p')?.textContent?.trim()).filter(Boolean);
+  // Get top-level comments only — clone each and strip nested replies before reading text
+  const topComments = Array.from(document.querySelectorAll(
+    'shreddit-comment[depth="0"], [data-testid="comment"]'
+  )).slice(0, 3).map(el => {
+    const clone = el.cloneNode(true);
+    clone.querySelectorAll('shreddit-comment').forEach(r => r.remove());
+    return clone.querySelector('p')?.textContent?.trim();
+  }).filter(Boolean);
 
   const description = [
     postText,
     topComments.length && `Top comments: ${topComments.join(' | ')}`
-  ].filter(Boolean).join(' ').substring(0, 300);
+  ].filter(Boolean).join(' ').substring(0, contextLimit);
 
-  return { title: sanitizeContext(title.substring(0, 100)), description: sanitizeContext(description), urlType: 'Reddit post' };
+  return { title: sanitizeContext(title.substring(0, 150)), description: sanitizeContext(description), urlType: 'Reddit post' };
 }
 
 function getTwitterContext() {
   const tweets = Array.from(document.querySelectorAll('[data-testid="tweetText"]'))
     .slice(0, 2).map(t => t.textContent?.trim()).filter(Boolean);
 
+  // Strip "(N) " notification count prefix, then strip the quoted tweet text from
+  // the tab title so we get just "Author on X" without duplicating the description
+  const rawTitle = document.title.replace(/^\(\d+\)\s*/, '');
+  const title = rawTitle.replace(/:\s*[""""].*$/, '').trim() || rawTitle;
+
   return {
-    title: sanitizeContext(document.title.substring(0, 100)),
-    description: sanitizeContext(tweets.join(' | ').substring(0, 300)),
+    title: sanitizeContext(title.substring(0, 150)),
+    description: sanitizeContext(tweets.join(' | ').substring(0, contextLimit)),
     urlType: 'Twitter/X post'
   };
 }
@@ -629,20 +716,26 @@ function getTwitterContext() {
 function getGitHubContext() {
   const repoName =
     document.querySelector('strong[itemprop="name"] a')?.textContent?.trim() ||
+    document.querySelector('h1 [itemprop="name"]')?.textContent?.trim() ||
     document.querySelector('.AppHeader-context-item-label')?.textContent?.trim() || '';
 
   const desc =
     document.querySelector('p[itemprop="description"]')?.textContent?.trim() ||
-    document.querySelector('.f4.my-3')?.textContent?.trim() || '';
+    document.querySelector('.f4.my-3')?.textContent?.trim() ||
+    document.querySelector('p.f4')?.textContent?.trim() || '';
 
-  const readme = document.querySelector('#readme article')?.textContent?.trim()?.substring(0, 200) || '';
+  const readme =
+    document.querySelector('#readme article')?.textContent?.trim()?.substring(0, 500) ||
+    document.querySelector('article.markdown-body')?.textContent?.trim()?.substring(0, 500) ||
+    document.querySelector('.markdown-body')?.textContent?.trim()?.substring(0, 500) || '';
 
   return {
-    title: sanitizeContext((repoName || document.title).substring(0, 100)),
-    description: sanitizeContext([desc, readme].filter(Boolean).join(' ').substring(0, 300)),
+    title: sanitizeContext((repoName || document.title).substring(0, 150)),
+    description: sanitizeContext([desc, readme].filter(Boolean).join(' ').substring(0, contextLimit)),
     urlType: 'GitHub repository'
   };
 }
+
 
 function getTwitchContext() {
   const streamer = document.querySelector('[data-a-target="user-channel-header-username"]')?.textContent?.trim() ||
@@ -651,40 +744,94 @@ function getTwitchContext() {
   const game = document.querySelector('[data-a-target="stream-game-link"]')?.textContent?.trim() || '';
 
   return {
-    title: sanitizeContext(title.substring(0, 100)),
+    title: sanitizeContext(title.substring(0, 150)),
     description: sanitizeContext([streamer && `Streamer: ${streamer}`, game && `Playing: ${game}`].filter(Boolean).join('. ')),
     urlType: 'Twitch stream'
   };
 }
 
+function getWikipediaContext() {
+  const title =
+    document.querySelector('.mw-page-title-main')?.textContent?.trim() ||
+    document.querySelector('#firstHeading')?.textContent?.trim() ||
+    document.title.replace(/\s*-\s*Wikipedia.*$/, '').trim();
+
+  // Find the first meaningful paragraph (skip disambiguation notices and short lines)
+  const intro = Array.from(document.querySelectorAll('.mw-parser-output > p'))
+    .find(p => p.textContent.trim().length > 80)?.textContent?.trim() || '';
+
+  return {
+    title: sanitizeContext(title.substring(0, 150)),
+    description: sanitizeContext(intro.substring(0, contextLimit)),
+    urlType: 'Wikipedia article'
+  };
+}
+
+function getNetflixContext() {
+  // Tab title format on watch pages: "Show Name - Netflix" or "Show: Episode - Netflix"
+  const title = document.title.replace(/\s*[|\-–]\s*Netflix\s*$/i, '').trim() || 'Netflix';
+
+  // Try DOM selectors for show/episode title (may not be available due to DRM rendering)
+  const videoTitle =
+    document.querySelector('[data-uia="video-title"]')?.textContent?.trim() ||
+    document.querySelector('.video-title h4')?.textContent?.trim() || '';
+
+  const displayTitle = videoTitle || title;
+  const isWatchPage = window.location.pathname.startsWith('/watch');
+
+  return {
+    title: sanitizeContext(displayTitle.substring(0, 150)),
+    description: isWatchPage ? sanitizeContext(`Watching on Netflix`) : '',
+    urlType: 'Netflix'
+  };
+}
+
 function getGenericContext() {
-  const title = document.title || 'Unknown page';
+  // Strip notification count prefix "(N) " that browsers add to tab titles
+  const title = document.title.replace(/^\(\d+\)\s*/, '') || 'Unknown page';
   const metaDesc =
     document.querySelector('meta[name="description"]')?.content ||
     document.querySelector('meta[property="og:description"]')?.content || '';
-  const h1 = document.querySelector('h1')?.textContent?.trim() || '';
 
-  // Try to grab article text for news sites
-  const articleText = Array.from(document.querySelectorAll('article p'))
-    .slice(0, 3).map(p => p.textContent?.trim()).filter(Boolean).join(' ');
+  // How many paragraphs to read scales with the context limit
+  const maxParas = contextLimit <= 800 ? 3 : contextLimit <= 2500 ? 10 : 25;
+  const sidebar = document.getElementById('ftc-sidebar');
+  const notOurs = el => !sidebar || !sidebar.contains(el);
 
-  const host = window.location.hostname;
+  // 1. article p — best for news/blog sites
+  let bodyText = Array.from(document.querySelectorAll('article p'))
+    .filter(notOurs).slice(0, maxParas).map(p => p.textContent?.trim()).filter(Boolean).join(' ');
+
+  // 2. main or role=main p — catches sites without <article> (Google Docs, apps)
+  if (!bodyText) {
+    bodyText = Array.from(document.querySelectorAll('main p, [role="main"] p'))
+      .filter(notOurs).filter(p => p.textContent?.trim().length > 30)
+      .slice(0, maxParas).map(p => p.textContent?.trim()).join(' ');
+  }
+
+  // 3. Any p longer than 30 chars — last resort, exclude our sidebar
+  if (!bodyText) {
+    bodyText = Array.from(document.querySelectorAll('p'))
+      .filter(notOurs).filter(p => p.textContent?.trim().length > 30)
+      .slice(0, maxParas).map(p => p.textContent?.trim()).join(' ');
+  }
+
   let urlType = 'website';
-  if (host.includes('netflix.com') || host.includes('hbo') || host.includes('disneyplus.com')) urlType = 'streaming video';
+  if (window.location.hostname.endsWith('hbo.com') || window.location.hostname.endsWith('disneyplus.com')) urlType = 'streaming video';
 
   return {
-    title: sanitizeContext(title.substring(0, 100)),
-    description: sanitizeContext((articleText || metaDesc || h1).substring(0, 300)),
+    title: sanitizeContext(title.substring(0, 150)),
+    description: sanitizeContext((bodyText || metaDesc).substring(0, contextLimit)),
     urlType
   };
 }
 
 // ── Message scheduler ────────────────────────────────────
 
-const PREFETCH_THRESHOLD  = { standard: 5,  constant: 20 };
-const FETCH_INTERVAL_MS   = { standard: 40000, constant: 20000 };
-const DRIP_MIN_MS         = { standard: 300, constant: 300 };
-const DRIP_RANGE_MS       = { standard: 1400, constant: 1400 };
+const PREFETCH_THRESHOLD  = { standard: 5,  turbo: 8 };
+const FETCH_INTERVAL_MS   = { standard: 40000, turbo: 12000 };
+const DRIP_MIN_MS         = { standard: 300, turbo: 250 };
+const DRIP_RANGE_MS       = { standard: 1400, turbo: 1000 };
 
 function scheduleMessages(messages) {
   messageQueue.push(...messages);
@@ -728,18 +875,32 @@ async function fetchAndSchedule() {
   if (!isEnabled || isFetching || currentTier === 'free' || isPaused) return;
 
   isFetching = true;
+
+  // Consent gate: show once per hostname before the first API call (if enabled in settings)
+  const cgHost = window.location.hostname.replace(/^www\./, '');
+  const cgKey = `site:${cgHost}`;
+  const cgStored = await chrome.storage.local.get([cgKey, 'consentGateEnabled']);
+  const cgSettings = cgStored[cgKey] || {};
+  const gateEnabled = cgStored.consentGateEnabled !== false; // default on
+  if (gateEnabled && !cgSettings.contextApproved) {
+    const approved = await showConsentGate();
+    if (!approved) { isFetching = false; disable(); return; }
+    const cgFresh = await chrome.storage.local.get(cgKey);
+    chrome.storage.local.set({ [cgKey]: { ...(cgFresh[cgKey] || {}), contextApproved: true } });
+  }
+
   const generation = fetchGeneration;
   setStatus('loading...');
 
   const context = getPageContext();
 
   try {
-    // Time-based history decay: only include messages from the last 90s
-    // This prevents the chat from looping on a single topic indefinitely
     const now = Date.now();
+    const historyLimit = currentTier === 'turbo' ? 20 : 10;
+    const historyAge   = currentTier === 'turbo' ? 120000 : 90000;
     const recentHistory = chatHistory
-      .filter(h => now - h.ts < 90000)
-      .slice(-10)
+      .filter(h => now - h.ts < historyAge)
+      .slice(-historyLimit)
       .map(h => h.text);
 
     const response = await chrome.runtime.sendMessage({
@@ -750,7 +911,10 @@ async function fetchAndSchedule() {
       history: recentHistory,
       userMessage: pendingUserMessage,
       streamerName,
-      count: currentTier === 'constant' ? 50 : 30
+      tier: currentTier,
+      count: currentTier === 'turbo' ? 20 : 30,
+      customPrompt,
+      url: window.location.href
     });
     pendingUserMessage = '';
 
@@ -786,12 +950,121 @@ async function accumulateUsage(usage) {
   });
 }
 
+// ── Sensitive site detection ──────────────────────────────
+
+const SENSITIVE_SITES = {
+  // Email
+  'mail.google.com': 'email service', 'inbox.google.com': 'email service',
+  'outlook.com': 'email service', 'outlook.live.com': 'email service',
+  'outlook.office.com': 'email service', 'outlook.office365.com': 'email service',
+  'mail.yahoo.com': 'email service', 'protonmail.com': 'email service',
+  'proton.me': 'email service', 'tutanota.com': 'email service',
+  'fastmail.com': 'email service', 'icloud.com': 'email service',
+  // Payments
+  'paypal.com': 'payment service', 'venmo.com': 'payment service',
+  'cash.app': 'payment service', 'wise.com': 'payment service',
+  'revolut.com': 'payment service', 'pay.google.com': 'payment service',
+  'payments.google.com': 'payment service', 'mobilepay.dk': 'payment service',
+  'mobilepay.fi': 'payment service',
+  // Password managers
+  'lastpass.com': 'password manager', '1password.com': 'password manager',
+  'app.1password.com': 'password manager', 'bitwarden.com': 'password manager',
+  'vault.bitwarden.com': 'password manager', 'dashlane.com': 'password manager',
+  'nordpass.com': 'password manager', 'keepersecurity.com': 'password manager',
+  // Danish government / identity
+  'skat.dk': 'government portal', 'borger.dk': 'government portal',
+  'mitid.dk': 'digital identity service', 'e-boks.dk': 'government portal',
+};
+
+function getSensitiveCategory(hostname) {
+  const h = hostname.replace(/^www\./, '');
+  if (SENSITIVE_SITES[h]) return SENSITIVE_SITES[h];
+  for (const domain of Object.keys(SENSITIVE_SITES)) {
+    if (h.endsWith('.' + domain)) return SENSITIVE_SITES[domain];
+  }
+  // TLD patterns — universal, no manual list needed
+  if (h.endsWith('.gov') || /\.gov\.[a-z]{2,3}$/.test(h)) return 'government portal';
+  if (h.endsWith('.bank')) return 'banking service';
+  if (h.endsWith('.mil')) return 'government portal';
+  return null;
+}
+
+// ── Whitelist check ───────────────────────────────────────
+
+async function isWhitelistBlocked() {
+  const { whitelistMode, whitelist } = await chrome.storage.local.get(['whitelistMode', 'whitelist']);
+  if (!whitelistMode) return false;
+  const host = window.location.hostname.replace(/^www\./, '');
+  const list = whitelist || [];
+  return !list.some(h => host === h || host.endsWith('.' + h));
+}
+
+async function isSensitiveBlocked() {
+  const host = window.location.hostname.replace(/^www\./, '');
+  let sensitive = getSensitiveCategory(host) !== null;
+  if (!sensitive) {
+    const { customBlocklist } = await chrome.storage.local.get('customBlocklist');
+    const list = customBlocklist || [];
+    sensitive = list.some(h => host === h || host.endsWith('.' + h));
+  }
+  if (!sensitive) return false;
+  const key = `site:${host}`;
+  const stored = await chrome.storage.local.get(key);
+  return !stored[key]?.sensitiveOverride;
+}
+
+// ── Consent gate ──────────────────────────────────────────
+
+async function showConsentGate() {
+  const gate = document.getElementById('ftc-consent-gate');
+  if (!gate) return true;
+
+  const context = getPageContext();
+  const { aiProvider } = await chrome.storage.local.get('aiProvider');
+  const providerName = aiProvider === 'openai' ? 'OpenAI' : 'Anthropic';
+  const host = window.location.hostname.replace(/^www\./, '');
+
+  document.getElementById('ftc-cg-provider').textContent = providerName;
+  document.getElementById('ftc-cg-type').textContent = context.urlType;
+  document.getElementById('ftc-cg-title').textContent = context.title || '(none)';
+  const descEl = document.getElementById('ftc-cg-desc');
+  if (context.description) {
+    descEl.textContent = context.description;
+    descEl.classList.remove('ftc-cg-empty');
+  } else {
+    descEl.textContent = 'None extracted';
+    descEl.classList.add('ftc-cg-empty');
+  }
+  document.getElementById('ftc-cg-host').textContent = host;
+  const promptRow = document.getElementById('ftc-cg-prompt-row');
+  if (customPrompt) {
+    document.getElementById('ftc-cg-prompt').textContent = customPrompt;
+    promptRow.style.display = '';
+  } else {
+    promptRow.style.display = 'none';
+  }
+  gate.classList.add('ftc-visible');
+
+  return new Promise(resolve => {
+    document.getElementById('ftc-consent-allow').onclick = () => {
+      gate.classList.remove('ftc-visible');
+      resolve(true);
+    };
+    document.getElementById('ftc-consent-deny').onclick = () => {
+      gate.classList.remove('ftc-visible');
+      resolve(false);
+    };
+  });
+}
+
 // ── Enable / Disable ─────────────────────────────────────
 
-function enable() {
+async function enable() {
+  if (await isWhitelistBlocked()) return;
+  if (await isSensitiveBlocked()) return;
   isEnabled = true;
   isPaused = false;
-  chrome.storage.local.set({ ftcAutoEnabled: true });
+  chrome.runtime.sendMessage({ type: 'SET_TAB_ENABLED', enabled: true }, () => { void chrome.runtime.lastError; });
   injectSidebar();
   startMessageDrip();
   if (currentTier !== 'free') {
@@ -805,7 +1078,8 @@ function enable() {
 function disable() {
   isEnabled = false;
   isPaused = false;
-  chrome.storage.local.set({ ftcAutoEnabled: false });
+  isCollapsed = false;
+  chrome.runtime.sendMessage({ type: 'SET_TAB_ENABLED', enabled: false }, () => { void chrome.runtime.lastError; });
   clearTimeout(schedulerTimer);
   clearTimeout(fetchTimer);
   messageQueue = [];
@@ -857,7 +1131,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.type === 'KEYBOARD_TOGGLE') {
-    if (isEnabled) disable(); else enable();
+    if (!isEnabled) enable();
+    else if (isCollapsed) expandSidebar();
+    else collapseSidebar();
     sendResponse({ ok: true });
   }
 
@@ -917,16 +1193,17 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 // If the user had chat active and navigated to a new page (full reload),
 // re-enable automatically using the stored site settings.
 
-chrome.storage.local.get(['ftcAutoEnabled', 'sidebarTheme'], ({ ftcAutoEnabled, sidebarTheme }) => {
-  if (!ftcAutoEnabled) return;
+chrome.runtime.sendMessage({ type: 'GET_TAB_ENABLED' }, ({ enabled } = {}) => {
+  void chrome.runtime.lastError;
+  if (!enabled) return;
   const host = window.location.hostname;
-  chrome.storage.local.get(`site:${host}`, (result) => {
+  chrome.storage.local.get([`site:${host}`, 'sidebarTheme'], (result) => {
     const s = result[`site:${host}`] || {};
     if (s.mode)              currentMode      = s.mode;
     if (s.tier)              currentTier      = s.tier;
     if (s.intensity != null) currentIntensity = s.intensity;
     if (s.fontSize)          currentFontSize  = s.fontSize;
-    if (sidebarTheme)        currentTheme     = sidebarTheme;
+    if (result.sidebarTheme) currentTheme     = result.sidebarTheme;
     enable();
   });
 });

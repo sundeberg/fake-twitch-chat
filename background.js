@@ -1,4 +1,5 @@
-const CLAUDE_API_URL = 'https://api.anthropic.com/v1/messages';
+const CLAUDE_API_URL  = 'https://api.anthropic.com/v1/messages';
+const OPENAI_API_URL  = 'https://api.openai.com/v1/chat/completions';
 const BTTV_API_URL   = 'https://api.betterttv.net/3/cached/emotes/global';
 const BTTV_CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours
 
@@ -19,9 +20,10 @@ async function loadBttvEmotes() {
 }
 
 chrome.runtime.onInstalled.addListener(() => loadBttvEmotes());
-chrome.runtime.onStartup.addListener(() => {
-  chrome.storage.local.set({ ftcAutoEnabled: false });
-  loadBttvEmotes();
+chrome.runtime.onStartup.addListener(() => loadBttvEmotes());
+
+chrome.tabs.onRemoved.addListener((tabId) => {
+  chrome.storage.session.remove(`ftcTab_${tabId}`);
 });
 
 const SYSTEM_PROMPT = `You are simulating a fast-moving Twitch chat.
@@ -96,6 +98,19 @@ chrome.commands.onCommand.addListener((command) => {
 });
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.type === 'SET_TAB_ENABLED') {
+    chrome.storage.session.set({ [`ftcTab_${sender.tab.id}`]: message.enabled });
+    sendResponse({ ok: true });
+  }
+
+  if (message.type === 'GET_TAB_ENABLED') {
+    const key = `ftcTab_${sender.tab.id}`;
+    chrome.storage.session.get(key, (result) => {
+      sendResponse({ enabled: !!result[key] });
+    });
+    return true;
+  }
+
   if (message.type === 'FETCH_MESSAGES') {
     handleFetchMessages(
       message.context,
@@ -104,7 +119,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       message.history,
       message.userMessage,
       message.streamerName,
-      message.count
+      message.count,
+      message.tier,
+      message.customPrompt || '',
+      message.url || ''
     ).then(sendResponse);
     return true;
   }
@@ -132,13 +150,19 @@ function sanitizeUserInput(text) {
     .substring(0, 200);
 }
 
-async function handleFetchMessages(context, mode = 'default', intensity = 5, history = [], userMessage = '', streamerName = '', count = 30) {
-  userMessage = sanitizeUserInput(userMessage);
-  const { apiKey } = await chrome.storage.local.get('apiKey');
+async function appendContextLog(entry) {
+  const { contextLog } = await chrome.storage.local.get('contextLog');
+  const log = contextLog || [];
+  log.unshift(entry);
+  if (log.length > 20) log.pop();
+  chrome.storage.local.set({ contextLog: log });
+}
 
-  if (!apiKey) {
-    return { error: 'No API key set. Click the extension icon → Settings to add your Claude API key.' };
-  }
+async function handleFetchMessages(context, mode = 'default', intensity = 5, history = [], userMessage = '', streamerName = '', count = 30, tier = 'standard', customPrompt = '', url = '') {
+  userMessage = sanitizeUserInput(userMessage);
+  customPrompt = sanitizeUserInput(customPrompt.substring(0, 500));
+  const { apiKey, openaiApiKey, aiProvider } = await chrome.storage.local.get(['apiKey', 'openaiApiKey', 'aiProvider']);
+  const provider = aiProvider || 'anthropic';
 
   const personality = PERSONALITIES[mode] || PERSONALITIES.default;
 
@@ -147,13 +171,31 @@ async function handleFetchMessages(context, mode = 'default', intensity = 5, his
     historySection = `\nRecent chat (build on this naturally, don't repeat exactly):\n${history.map(h => `- ${h}`).join('\n')}`;
   }
 
+  // Detect if the streamer called out a specific chatter by name (with or without @)
+  const historyUsernames = history
+    .map(h => h.match(/^\[([^\]]+)\]/)?.[1])
+    .filter(Boolean);
+  const cleanedMessage = userMessage.replace(/@/g, '');
+  const mentionedUser = historyUsernames.find(name =>
+    cleanedMessage.toLowerCase().includes(name.toLowerCase())
+  );
+
   let userSection = '';
   if (userMessage) {
     const name = streamerName || 'the streamer';
     userSection = `\n${name} just typed in chat: "${userMessage}" — have several chatters react to this specifically.`;
+    if (mentionedUser) {
+      userSection += ` ${name} called out ${mentionedUser} directly — ${mentionedUser} must respond to this in the batch.`;
+    }
   }
 
   const nameSection = streamerName ? `\n- Streamer name: ${streamerName} (address them occasionally, not every message)` : '';
+
+  const turboSection = (tier === 'turbo' && history.length >= 5)
+    ? '\n\nTurbo mode: roughly 30% of messages should be chatters directly calling out each other by username — e.g. "@NoChill__ L take" or "nah pogmaster3000 is right". Use the exact usernames from the recent chat history. Chatters can agree, argue, flame, or dunk on each other, but always about what\'s on screen. The other 70% react to the page content as normal.'
+    : '';
+
+  const customPromptSection = customPrompt ? `\n\nAdditional context from the user: ${customPrompt}` : '';
 
   const userPrompt = `Context:
 - Page title: ${context.title}
@@ -161,10 +203,35 @@ async function handleFetchMessages(context, mode = 'default', intensity = 5, his
 - Description: ${context.description}
 - Current year: ${new Date().getFullYear()}
 - Chat personality: ${personality.modifier}
-- Intensity: ${intensity}/10 — ${INTENSITY_DESCRIPTIONS[intensity]}${nameSection}${historySection}${userSection}
+- Intensity: ${intensity}/10 — ${INTENSITY_DESCRIPTIONS[intensity]}${nameSection}${turboSection}${historySection}${userSection}${customPromptSection}
 
 Generate ${count} Twitch chat messages reacting to this content.`;
 
+  const logEntry = {
+    timestamp: Date.now(),
+    url,
+    urlType: context.urlType,
+    title: context.title,
+    description: context.description,
+    customPrompt,
+    mode,
+    tier
+  };
+
+  let result;
+  if (provider === 'openai') {
+    if (!openaiApiKey) return { error: 'No OpenAI API key set. Click the extension icon → Settings.' };
+    result = await callOpenAI(openaiApiKey, userPrompt);
+  } else {
+    if (!apiKey) return { error: 'No API key set. Click the extension icon → Settings to add your Anthropic API key.' };
+    result = await callAnthropic(apiKey, userPrompt, count);
+  }
+
+  if (!result.error) appendContextLog(logEntry);
+  return result;
+}
+
+async function callAnthropic(apiKey, userPrompt, count) {
   try {
     const response = await fetch(CLAUDE_API_URL, {
       method: 'POST',
@@ -183,16 +250,42 @@ Generate ${count} Twitch chat messages reacting to this content.`;
     });
 
     const data = await response.json();
-
-    if (!response.ok) {
-      return { error: data.error?.message || `API error: ${response.status}` };
-    }
+    if (!response.ok) return { error: data.error?.message || `API error: ${response.status}` };
 
     let text = data.content[0].text.trim();
     text = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
     const messages = JSON.parse(text);
-    return { messages, usage: data.usage };
+    return { messages, usage: { input_tokens: data.usage.input_tokens, output_tokens: data.usage.output_tokens } };
+  } catch (err) {
+    return { error: err.message };
+  }
+}
 
+async function callOpenAI(apiKey, userPrompt) {
+  try {
+    const response = await fetch(OPENAI_API_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        max_tokens: 1024,
+        messages: [
+          { role: 'system', content: SYSTEM_PROMPT },
+          { role: 'user', content: userPrompt }
+        ]
+      })
+    });
+
+    const data = await response.json();
+    if (!response.ok) return { error: data.error?.message || `API error: ${response.status}` };
+
+    let text = data.choices[0].message.content.trim();
+    text = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
+    const messages = JSON.parse(text);
+    return { messages, usage: { input_tokens: data.usage.prompt_tokens, output_tokens: data.usage.completion_tokens } };
   } catch (err) {
     return { error: err.message };
   }
