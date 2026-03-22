@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Privacy Policy - Fake Twitch Chat</title>
+  <style>
+    body {
+      font-family: system-ui, sans-serif;
+      max-width: 720px;
+      margin: 48px auto;
+      padding: 0 24px;
+      color: #1a1a1a;
+      line-height: 1.6;
+    }
+    h1 { font-size: 1.6rem; margin-bottom: 4px; }
+    h2 { font-size: 1.1rem; margin-top: 2rem; }
+    h3 { font-size: 1rem; margin-top: 1.5rem; }
+    p, li { font-size: 0.97rem; }
+    ul { padding-left: 1.4rem; }
+    a { color: #6441a5; }
+    .meta { color: #666; font-size: 0.9rem; margin-bottom: 2rem; }
+  </style>
+</head>
+<body>
+  <h1>Privacy Policy</h1>
+  <p class="meta">Fake Twitch Chat - Last updated: March 2026</p>
+
+  <p>
+    Fake Twitch Chat is a browser extension that generates AI-powered fake Twitch-style chat
+    reactions to whatever page you are viewing. This policy explains what data the extension
+    handles and how it is used.
+  </p>
+
+  <h2>Data stored locally on your device</h2>
+  <p>The following is stored in <code>chrome.storage.local</code>, which is sandboxed to the
+  extension and never transmitted to the developer:</p>
+  <ul>
+    <li>Your Anthropic and/or OpenAI API keys</li>
+    <li>Your chosen AI provider</li>
+    <li>Your chosen streamer name</li>
+    <li>Your custom prompt (if set)</li>
+    <li>Per-site settings (chat mode, tier, intensity, font size, consent approvals)</li>
+    <li>Sidebar width preference and theme preference</li>
+    <li>Context size preference</li>
+    <li>Usage statistics (estimated cost, API call count, token count)</li>
+    <li>Whitelist mode toggle and approved hostnames</li>
+    <li>Custom blocked sites list</li>
+    <li>A log of the last 20 successful AI fetches (page title, extracted context, mode, tier)</li>
+    <li>A cache of BetterTTV global emote IDs (refreshed every 24 hours)</li>
+  </ul>
+  <p>None of this data is collected by or transmitted to the developer.</p>
+
+  <h2>Data sent to third-party services</h2>
+
+  <h3>Anthropic API</h3>
+  <p>
+    When you use the Standard or Turbo tier with Anthropic selected as your provider, the extension
+    sends requests directly from your browser to <code>api.anthropic.com</code> using your own API
+    key. Each request includes:
+  </p>
+  <ul>
+    <li>A summary of the current page (title, description, and site-specific content such as
+        a YouTube video title, Reddit post body, or GitHub repository description)</li>
+    <li>Your selected chat mode and intensity</li>
+    <li>Your streamer name (if set)</li>
+    <li>Your custom prompt (if set)</li>
+    <li>The last few chat messages as context</li>
+    <li>Any message you typed into the chat input</li>
+  </ul>
+  <p>
+    This data is processed by Anthropic under their
+    <a href="https://www.anthropic.com/legal/privacy" target="_blank" rel="noopener">Privacy Policy</a>
+    and <a href="https://www.anthropic.com/legal/aup" target="_blank" rel="noopener">Usage Policy</a>.
+    The developer of this extension does not receive, store, or have access to any of these requests.
+  </p>
+
+  <h3>OpenAI API</h3>
+  <p>
+    When you use the Standard or Turbo tier with OpenAI selected as your provider, the extension
+    sends the same set of data described above directly from your browser to
+    <code>api.openai.com</code> using your own API key.
+    This data is processed by OpenAI under their
+    <a href="https://openai.com/policies/privacy-policy" target="_blank" rel="noopener">Privacy Policy</a>.
+    The developer of this extension does not receive, store, or have access to any of these requests.
+  </p>
+
+  <h3>BetterTTV API</h3>
+  <p>
+    Once per 24-hour period, the extension fetches the global emote list from the BetterTTV API
+    (<code>api.betterttv.net</code>) to resolve emote names to images. No personal data is sent
+    in this request.
+  </p>
+
+  <h2>Data the developer does not collect</h2>
+  <p>The developer collects no data whatsoever. There are no analytics, no telemetry, no crash
+  reports, and no backend server associated with this extension.</p>
+
+  <h2>Permissions used</h2>
+  <ul>
+    <li><strong>storage</strong> - to save your settings and API key locally</li>
+    <li><strong>activeTab / scripting</strong> - to inject the chat sidebar into the current page</li>
+    <li><strong>host permissions</strong> - to read page context from the sites you visit, and to
+        make API calls to <code>api.anthropic.com</code> and <code>api.betterttv.net</code></li>
+  </ul>
+
+  <h2>Children</h2>
+  <p>This extension is not directed at children under 13 and does not knowingly collect any
+  information from children.</p>
+
+  <h2>Changes to this policy</h2>
+  <p>If this policy changes materially, the updated version will be posted here with a new date.</p>
+
+  <h2>Contact</h2>
+  <p>Questions? Open an issue on the
+  <a href="https://github.com/Sundebergius/fake-twitch-chat" target="_blank" rel="noopener">GitHub repository</a>.
+  </p>
+</body>
+</html>
