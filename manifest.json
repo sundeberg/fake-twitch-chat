@@ -1,10 +1,10 @@
 {
   "manifest_version": 3,
   "name": "Fake Twitch Chat",
-  "version": "1.0",
-  "description": "AI-powered fake Twitch chat overlay for any website",
+  "version": "1.1",
+  "description": "AI-powered fake Twitch chat sidebar for any website. Reacts to your page in real time.",
   "permissions": ["storage", "tabs"],
-  "host_permissions": ["https://api.anthropic.com/*", "https://api.betterttv.net/*"],
+  "host_permissions": ["https://api.anthropic.com/*", "https://api.openai.com/*", "https://api.betterttv.net/*"],
   "background": {
     "service_worker": "background.js"
   },
@@ -16,9 +16,19 @@
     }
   ],
   "options_page": "options.html",
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
   "action": {
     "default_popup": "popup.html",
-    "default_title": "Fake Twitch Chat"
+    "default_title": "Fake Twitch Chat",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
   },
   "commands": {
     "toggle-sidebar": {
