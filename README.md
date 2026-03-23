@@ -187,6 +187,10 @@ All fields have hard character limits: 150 characters for titles, 800 characters
 - All text rendered in the sidebar is HTML-escaped before any emote substitution takes place.
 - The AI providers (Claude Haiku, GPT-4o mini) apply their own content policies and will not generate slurs, explicit content, or genuinely harmful messages regardless of the personality mode selected.
 
+### Privacy Policy
+
+Full privacy policy is available at [sundeberg.github.io/fake-twitch-chat/privacy_policy.html](https://sundeberg.github.io/fake-twitch-chat/privacy_policy.html).
+
 ### How to Verify This Yourself
 
 You do not have to take any of the above on faith. Here is how to check independently:
